@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --bg: #FAF9F6;
+      --surface: #FFFFFF;
+      --accent: #CBC3E3;
+      --accent-dark: #9B8EC7;
+      --text: #25233A;
+      --muted: #6E6A86;
+      --border: #E4E1EE;
+      --success: #1E7E48;
+      --warn: #B35900;
+      --danger: #C92A2A;
+      --info: #1A73E8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 430px;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+    }
+    /* Header */
+    .header {
+      background: var(--surface);
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h2 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badges {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge {
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 99px;
+      font-weight: 600;
+    }
+    .badge-ok { background: #E6F4EA; color: var(--success); }
+    .badge-warn { background: #FEF3E2; color: var(--warn); }
+    .badge-test { background: #E8F0FE; color: var(--info); }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 9px 0;
+      text-align: center;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      color: var(--text);
+      border-bottom-color: var(--accent-dark);
+      background: #F7F5FC;
+    }
+
+    /* Tab Panels */
+    .panel { display: none; padding: 12px 14px; }
+    .panel.active { display: block; }
+
+    /* Buttons & Inputs */
+    .btn {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--accent-dark);
+      background: var(--accent);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 12.5px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #B8ADD9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      margin-top: 6px;
+    }
+    .btn-secondary:hover { background: #F2F0F7; }
+
+    label.field-label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      margin-top: 10px;
+      color: var(--text);
+    }
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      background: var(--surface);
+      color: var(--text);
+    }
+    textarea { resize: vertical; min-height: 52px; font-family: inherit; }
+
+    /* Toolbar in Scanner */
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 10px 0 6px 0;
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+    .toolbar a {
+      color: var(--text);
+      text-decoration: underline;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    /* Candidate / Attachment Cards */
+    #resultsList {
+      max-height: 220px;
+      overflow-y: auto;
+      margin-bottom: 8px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 7px;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .card input[type="checkbox"] { margin-top: 3px; cursor: pointer; }
+    .card-body { flex: 1; min-width: 0; }
+    .card-title {
+      font-weight: 600;
+      font-size: 12.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-meta {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+    .tag {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #F0ECF9;
+      color: #463A6E;
+      font-weight: 600;
+    }
+    .tag-score { background: #E6F4EA; color: var(--success); }
+    .tag-dup { background: #FEF3E2; color: var(--warn); }
+
+    /* Progress & Log Box */
+    .progress-wrap {
+      width: 100%;
+      background: var(--border);
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 8px 0;
+      display: none;
+    }
+    .progress-bar {
+      height: 100%;
+      background: #6B5B95;
+      width: 0%;
+      transition: width 0.2s;
+    }
+    .status-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 11.5px;
+      color: var(--text);
+      max-height: 120px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      line-height: 1.4;
+      margin-top: 8px;
+    }
+    .row-inline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <div class="header">
+    <h2>HireFlow AI <span style="font-weight:400; font-size:12px; color:#6E6A86;">v2.0.1</span></h2>
+    <div class="badges">
+      <span id="serverBadge" class="badge badge-test">Checking...</span>
+      <span id="authBadge" class="badge badge-warn">No Token</span>
+    </div>
+  </div>
+
+  <!-- Navigation Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="scannerTab">1. Scanner</button>
+    <button class="tab-btn" data-tab="filterTab">2. Smart Filters</button>
+    <button class="tab-btn" data-tab="authTab">3. Security & API</button>
+  </div>
+
+  <!-- TAB 1: SCANNER -->
+  <div id="scannerTab" class="panel active">
+    <button id="scanBtn" class="btn">Scan Gmail (Opened Email or Inbox List)</button>
+
+    <div class="toolbar" id="selectionToolbar" style="display:none;">
+      <span id="matchSummary">0 matches</span>
+      <div>
+        <a id="selectAllBtn">Select All</a> · <a id="selectNoneBtn">Clear</a>
+      </div>
+    </div>
+
+    <div id="resultsList"></div>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <button id="uploadBtn" class="btn" style="display:none;">
+      Extract, Verify & Process Selected Resumes
+    </button>
+
+    <div id="statusBox" class="status-box">Ready. Open Gmail Inbox or an email thread and click Scan.</div>
+  </div>
+
+  <!-- TAB 2: SMART FILTERS -->
+  <div id="filterTab" class="panel">
+    <div class="row-inline">
+      <input type="checkbox" id="useStandardFilter" checked>
+      <label for="useStandardFilter"><strong>Enable Standard Resume Filter</strong> (resume, cv, application, job, candidate, bio-data)</label>
+    </div>
+
+    <label class="field-label">User-Defined Positive Keywords (comma-separated)</label>
+    <textarea id="customKeywords" placeholder="e.g. java, spring boot, react, full stack, backend, node, python"></textarea>
+
+    <label class="field-label">Strict Require User Keywords?</label>
+    <div class="row-inline" style="margin-top:2px;">
+      <input type="checkbox" id="strictCustomMatch">
+      <label for="strictCustomMatch">Only select emails that match at least 1 User-Defined Keyword above</label>
+    </div>
+
+    <label class="field-label">Exclude Non-Resume Keywords (comma-separated)</label>
+    <textarea id="excludeKeywords" placeholder="e.g. invoice, receipt, bill, salary slip, tax, bank statement, otp"></textarea>
+
+    <label class="field-label">Minimum Smart Match Score (0 - 100)</label>
+    <input type="text" id="minScoreInput" value="40">
+
+    <button id="saveFiltersBtn" class="btn" style="margin-top:12px;">Save Smart Filter Rules</button>
+    <button id="clearDedupCacheBtn" class="btn btn-secondary">Reset Local SHA-256 Dedup History</button>
+    <div id="filterSavedMsg" style="font-size:11.5px; color:var(--success); margin-top:6px;"></div>
+  </div>
+
+  <!-- TAB 3: SECURITY & API -->
+  <div id="authTab" class="panel">
+    <label class="field-label" style="margin-top:2px;">Spring Boot Backend Base URL</label>
+    <input type="text" id="apiUrlInput" value="http://localhost:8080">
+
+    <label class="field-label">Organization / Tenant ID</label>
+    <input type="text" id="tenantIdInput" placeholder="e.g. 11111111-1111-1111-1111-111111111111">
+
+    <label class="field-label">Scoped Extension Upload Token (Bearer Token)</label>
+    <input type="password" id="apiTokenInput" placeholder="Paste Bearer token from HireFlow console">
+
+    <button id="saveAuthBtn" class="btn" style="margin-top:12px;">Save Security Credentials</button>
+    <button id="useDefaultTokenBtn" class="btn btn-secondary">Set Pre-Seeded Dev Token (hf_ext_live_org_kartgen_01_demo12345)</button>
+    <div id="authSavedMsg" style="font-size:11.5px; color:var(--success); margin-top:6px;"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

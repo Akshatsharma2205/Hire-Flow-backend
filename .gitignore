@@ -1,0 +1,60 @@
+# ==========================================
+# HireFlow AI Root .gitignore
+# ==========================================
+
+# ── Build Outputs ──
+target/
+**/target/
+build/
+**/build/
+out/
+**/out/
+dist/
+**/dist/
+!.mvn/wrapper/maven-wrapper.jar
+
+# ── Node.js & Extension ──
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── Local Embedded JDK & Tools ──
+.jdk/
+**/.jdk/
+
+# ── Local Runtime Storage & Temp ──
+.local-storage/
+**/.local-storage/
+tmp/
+**/tmp/
+*.tmp
+
+# ── Logs ──
+*.log
+logs/
+**/logs/
+
+# ── Environment & Local Config ──
+.env
+.env.*
+!.env.example
+*.env.local
+
+# ── IDEs & Tooling ──
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+.project
+.classpath
+.settings/
+bin/
+
+# ── Operating System Artifacts ──
+.DS_Store
+Thumbs.db
+desktop.ini

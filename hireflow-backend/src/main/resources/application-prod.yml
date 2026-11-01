@@ -1,0 +1,60 @@
+# ── Production profile (PostgreSQL + Flyway + AWS S3) ──
+# Every secret below must be supplied by the deployment environment.
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:hireflow}
+    username: ${DB_USERNAME:hireflow}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: 10000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    locations: classpath:db/migration
+    clean-disabled: true
+
+hireflow:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  crypto:
+    secret-key: ${CRYPTO_SECRET_KEY}
+  storage:
+    provider: s3
+    s3-bucket: ${S3_BUCKET}
+    s3-region: ${S3_REGION:ap-south-1}
+    s3-endpoint: ${S3_ENDPOINT:}
+    s3-path-style: ${S3_PATH_STYLE:false}
+    s3-presigned-expiry-minutes: ${S3_PRESIGNED_EXPIRY_MINUTES:15}
+  ai:
+    provider: ${AI_PROVIDER:external}
+    endpoint-url: ${AI_ENDPOINT_URL}
+    api-key: ${AI_API_KEY}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  oauth:
+    google-client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    google-client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+    microsoft-client-id: ${MS_OAUTH_CLIENT_ID:}
+    microsoft-client-secret: ${MS_OAUTH_CLIENT_SECRET:}
+    microsoft-tenant: ${MS_OAUTH_TENANT:common}
+  worker:
+    poll-ms: ${WORKER_POLL_MS:2000}
+    batch-size: ${WORKER_BATCH_SIZE:10}
+    stale-after-minutes: ${WORKER_STALE_MINUTES:10}
+
+logging:
+  level:
+    com.kartgen.hireflow: INFO
+    org.hibernate.SQL: WARN

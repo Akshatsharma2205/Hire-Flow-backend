@@ -1,0 +1,3184 @@
+diff --git a/src/main/java/com/kartgen/hireflow/config/HireFlowProperties.java b/src/main/java/com/kartgen/hireflow/config/HireFlowProperties.java
+index 4d0e913..89adbf0 100644
+--- a/src/main/java/com/kartgen/hireflow/config/HireFlowProperties.java
++++ b/src/main/java/com/kartgen/hireflow/config/HireFlowProperties.java
+@@ -54,13 +54,22 @@ public class HireFlowProperties {
+ 
+     @Data
+     public static class WebhookProperties {
++        /** Master switch for inbound forwarding webhooks. */
++        private boolean enabled = true;
++        /** Signed requests older/newer than this many seconds are rejected. */
++        private long replayWindowSeconds = 300;
++        /** Hard cap on the raw webhook request body (HMAC verification buffer). */
++        private long maxBodyBytes = 26_214_400L;
++        /** Maximum number of attachments accepted per webhook delivery. */
++        private int maxAttachments = 20;
++        /** Maximum size of a single attachment (multipart part or decoded base64). */
++        private long maxAttachmentBytes = 52_428_800L;
+         /**
+-         * Shared secret required on inbound forwarding webhooks. The request must
+-         * carry it in the X-HireFlow-Webhook-Secret header. Never leave the default
+-         * value enabled in production.
++         * Local-development convenience only: secret used by the local profile
++         * startup seeder to provision the demo organization credential. Never
++         * referenced outside the local profile; ignored in production.
+          */
+-        private String secret = "hireflow-local-webhook-secret";
+-        private boolean enabled = true;
++        private String localDevSecret = "hireflow-local-webhook-secret";
+     }
+ 
+     @Data
+diff --git a/src/main/java/com/kartgen/hireflow/config/ProductionSafetyConfig.java b/src/main/java/com/kartgen/hireflow/config/ProductionSafetyConfig.java
+index 4b45445..ad0b7d0 100644
+--- a/src/main/java/com/kartgen/hireflow/config/ProductionSafetyConfig.java
++++ b/src/main/java/com/kartgen/hireflow/config/ProductionSafetyConfig.java
+@@ -29,11 +29,8 @@ public class ProductionSafetyConfig {
+                 || "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF".equalsIgnoreCase(crypto)) {
+             throw new IllegalStateException("CRYPTO_SECRET_KEY must be a distinct 64 hex character secret (AES-256)");
+         }
+-        if (props.getWebhook().isEnabled()) {
+-            String webhook = props.getWebhook().getSecret();
+-            if (webhook == null || webhook.isBlank() || "hireflow-local-webhook-secret".equals(webhook)) {
+-                throw new IllegalStateException("WEBHOOK_SECRET must be configured in production");
+-            }
++        if (props.getWebhook().isEnabled() && props.getWebhook().getReplayWindowSeconds() < 30) {
++            throw new IllegalStateException("WEBHOOK replay window must be at least 30 seconds in production");
+         }
+         if (!"s3".equalsIgnoreCase(props.getStorage().getProvider())) {
+             throw new IllegalStateException("Production storage provider must be s3");
+diff --git a/src/main/java/com/kartgen/hireflow/mail/channel/ForwardingWebhookController.java b/src/main/java/com/kartgen/hireflow/mail/channel/ForwardingWebhookController.java
+index 27dbada..ec0cb95 100644
+--- a/src/main/java/com/kartgen/hireflow/mail/channel/ForwardingWebhookController.java
++++ b/src/main/java/com/kartgen/hireflow/mail/channel/ForwardingWebhookController.java
+@@ -1,9 +1,12 @@
+ package com.kartgen.hireflow.mail.channel;
+ 
+-import com.kartgen.hireflow.common.TenantContext;
+-import com.kartgen.hireflow.mail.service.MessageIngestionService;
++import com.kartgen.hireflow.config.HireFlowProperties;
++import com.kartgen.hireflow.security.WebhookAuthFilter;
++import com.kartgen.hireflow.webhook.WebhookIngestionService;
++import jakarta.servlet.http.HttpServletRequest;
+ import lombok.RequiredArgsConstructor;
+ import lombok.extern.slf4j.Slf4j;
++import org.springframework.http.HttpStatus;
+ import org.springframework.http.MediaType;
+ import org.springframework.http.ResponseEntity;
+ import org.springframework.web.bind.annotation.*;
+@@ -11,108 +14,231 @@ import org.springframework.web.multipart.MultipartFile;
+ 
+ import java.util.*;
+ 
++/**
++ * Channel 4: Inbound Forwarding Webhook.
++ *
++ * Requests are already authenticated by WebhookAuthFilter (per-organization
++ * HMAC signature, timestamp, nonce, idempotency key). The verified
++ * organization, credential and body digest arrive via request attributes -
++ * never from client-controlled JSON or form fields.
++ *
++ * Multipart and JSON/base64 deliveries share the same idempotent,
++ * tenant-isolated ingestion path: ONE forwarded email -> ONE inbound
++ * message -> N attachments -> N processing jobs.
++ */
+ @Slf4j
+ @RestController
+ @RequestMapping("/api/v1/mail-webhook")
+ @RequiredArgsConstructor
+ public class ForwardingWebhookController {
+ 
+-    private final MessageIngestionService ingestionService;
++    private final WebhookIngestionService ingestionService;
++    private final HireFlowProperties props;
+ 
+-    public record WebhookPayload(
+-            String senderEmail,
+-            String senderName,
+-            String subject,
+-            String sourceType
+-    ) {}
++    private static final int MAX_SENDER_EMAIL_LENGTH = 320;
++    private static final int MAX_SUBJECT_LENGTH = 4000;
++    private static final int MAX_SOURCE_TYPE_LENGTH = 30;
+ 
+     /**
+-     * Channel 4: Inbound Forwarding Webhook.
+-     * Receives JSON/Multipart from AWS SES / SendGrid / Exchange rules.
+-     * Each attachment is processed as a separate candidate.
++     * Multipart email delivery. The HMAC signature covers the exact raw
++     * multipart bytes (including boundaries), which WebhookAuthFilter has
++     * already captured and verified.
+      */
+     @PostMapping(value = "/inbound", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+     public ResponseEntity<?> inboundWebhook(
++            HttpServletRequest request,
+             @RequestParam(value = "senderEmail", required = false) String senderEmail,
++            @RequestParam(value = "originalSenderEmail", required = false) String originalSenderEmail,
+             @RequestParam(value = "subject", required = false) String subject,
+             @RequestParam(value = "sourceType", defaultValue = "FORWARDING") String sourceType,
+             @RequestParam(value = "jobId", required = false) UUID jobId,
+             @RequestParam(value = "files", required = false) List<MultipartFile> files
+     ) {
+-        UUID orgId = TenantContext.getOrganizationId();
+         if (files == null || files.isEmpty()) {
+-            return ResponseEntity.badRequest().body(Map.of("error", "No attachments provided"));
++            return badRequest("No attachments provided");
++        }
++        if (files.size() > props.getWebhook().getMaxAttachments()) {
++            return payloadTooLarge("Too many attachments");
++        }
++        for (MultipartFile file : files) {
++            if (file.getSize() > props.getWebhook().getMaxAttachmentBytes()) {
++                return payloadTooLarge("Attachment too large");
++            }
+         }
+ 
+-        try {
+-            List<byte[]> attachmentData = new ArrayList<>();
+-            List<String> attachmentNames = new ArrayList<>();
+-            for (MultipartFile f : files) {
++        List<byte[]> attachmentData = new ArrayList<>();
++        List<String> attachmentNames = new ArrayList<>();
++        for (MultipartFile f : files) {
++            try {
+                 attachmentData.add(f.getBytes());
+-                attachmentNames.add(f.getOriginalFilename());
++                attachmentNames.add(truncate(f.getOriginalFilename(), 4000));
++            } catch (java.io.IOException e) {
++                return badRequest("Unable to read attachment");
+             }
+-
+-            List<UUID> accepted = ingestionService.ingestFromWebhook(
+-                    orgId, senderEmail, subject, sourceType, attachmentData, attachmentNames, jobId);
+-
+-            return ResponseEntity.accepted().body(Map.of(
+-                    "status", "QUEUED",
+-                    "acceptedCount", accepted.size(),
+-                    "attachmentIds", accepted
+-            ));
+-        } catch (Exception e) {
+-            log.error("Webhook inbound error: {}", e.getMessage(), e);
+-            return ResponseEntity.internalServerError().body(Map.of("error", "Webhook processing failed"));
+         }
++
++        return ingest(request, senderEmail, originalSenderEmail, subject, sourceType, jobId,
++                attachmentData, attachmentNames);
+     }
+ 
+     /**
+-     * JSON-only inbound (for simpler test console integration).
++     * JSON/base64 email delivery. Attachments are base64-encoded; decoded
++     * sizes are enforced before any processing.
+      */
+     @PostMapping(value = "/inbound", consumes = MediaType.APPLICATION_JSON_VALUE)
+-    public ResponseEntity<?> inboundWebhookJson(@RequestBody Map<String, Object> payload) {
+-        UUID orgId = TenantContext.getOrganizationId();
+-        String senderEmail = (String) payload.getOrDefault("senderEmail", "");
+-        String subject = (String) payload.getOrDefault("subject", "");
+-        String sourceType = (String) payload.getOrDefault("sourceType", "FORWARDING");
++    public ResponseEntity<?> inboundWebhookJson(HttpServletRequest request,
++                                                @RequestBody Map<String, Object> payload) {
++        String senderEmail = stringOrNull(payload.get("senderEmail"));
++        String originalSenderEmail = stringOrNull(payload.get("originalSenderEmail"));
++        String subject = stringOrNull(payload.get("subject"));
++        String sourceType = payload.get("sourceType") == null
++                ? "FORWARDING" : payload.get("sourceType").toString();
++
+         UUID jobId = null;
+         Object jobIdRaw = payload.get("jobId");
+         if (jobIdRaw != null && !jobIdRaw.toString().isBlank()) {
+             try {
+                 jobId = UUID.fromString(jobIdRaw.toString());
+             } catch (IllegalArgumentException e) {
+-                return ResponseEntity.badRequest().body(Map.of("error", "Invalid jobId"));
++                return badRequest("Invalid jobId");
+             }
+         }
+ 
+-        // For JSON payloads, attachments would be base64 encoded
+         @SuppressWarnings("unchecked")
+         List<Map<String, String>> attachments = (List<Map<String, String>>)
+                 payload.getOrDefault("attachments", List.of());
++        if (attachments.size() > props.getWebhook().getMaxAttachments()) {
++            return payloadTooLarge("Too many attachments");
++        }
+ 
+         List<byte[]> data = new ArrayList<>();
+         List<String> names = new ArrayList<>();
+         for (Map<String, String> att : attachments) {
+             String b64 = att.get("data");
+             String name = att.getOrDefault("filename", "resume.pdf");
+-            if (b64 != null) {
+-                data.add(Base64.getDecoder().decode(b64));
+-                names.add(name);
++            if (b64 == null) {
++                continue;
++            }
++            byte[] decoded;
++            try {
++                decoded = Base64.getDecoder().decode(b64);
++            } catch (IllegalArgumentException e) {
++                return badRequest("Invalid attachment encoding");
+             }
++            if (decoded.length > props.getWebhook().getMaxAttachmentBytes()) {
++                return payloadTooLarge("Attachment too large");
++            }
++            data.add(decoded);
++            names.add(truncate(name, 4000));
+         }
+ 
+         if (data.isEmpty()) {
+-            return ResponseEntity.badRequest().body(Map.of("error", "No valid attachments"));
++            return badRequest("No valid attachments");
++        }
++
++        return ingest(request, senderEmail, originalSenderEmail, subject, sourceType, jobId, data, names);
++    }
++
++    private ResponseEntity<?> ingest(HttpServletRequest request, String senderEmail,
++                                     String originalSenderEmail, String subject, String sourceType,
++                                     UUID jobId, List<byte[]> attachmentData, List<String> attachmentNames) {
++        UUID organizationId = attribute(request, WebhookAuthFilter.ATTR_ORG_ID);
++        UUID credentialId = attribute(request, WebhookAuthFilter.ATTR_CREDENTIAL_ID);
++        String idempotencyKey = (String) request.getAttribute(WebhookAuthFilter.ATTR_IDEMPOTENCY_KEY);
++        String nonce = (String) request.getAttribute(WebhookAuthFilter.ATTR_NONCE);
++        String bodySha256 = (String) request.getAttribute(WebhookAuthFilter.ATTR_BODY_SHA256);
++        if (organizationId == null || credentialId == null || idempotencyKey == null
++                || nonce == null || bodySha256 == null) {
++            // Should be unreachable: the filter always sets these on authenticated requests.
++            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
++                    .body(Map.of("error", "Webhook authentication missing"));
+         }
+ 
+-        List<UUID> accepted = ingestionService.ingestFromWebhook(
+-                orgId, senderEmail, subject, sourceType, data, names, jobId);
++        senderEmail = truncate(senderEmail, MAX_SENDER_EMAIL_LENGTH);
++        originalSenderEmail = truncate(originalSenderEmail, MAX_SENDER_EMAIL_LENGTH);
++        subject = truncate(subject, MAX_SUBJECT_LENGTH);
++        if (sourceType == null || sourceType.isBlank()) {
++            sourceType = "FORWARDING";
++        }
++        sourceType = truncate(sourceType, MAX_SOURCE_TYPE_LENGTH);
+ 
+-        return ResponseEntity.accepted().body(Map.of(
+-                "status", "QUEUED",
+-                "acceptedCount", accepted.size(),
+-                "attachmentIds", accepted
+-        ));
++        try {
++            WebhookIngestionService.DeliveryOutcome outcome = ingestionService.ingestVerifiedDelivery(
++                    organizationId, credentialId, idempotencyKey, nonce, bodySha256,
++                    senderEmail, originalSenderEmail, subject, sourceType, jobId,
++                    attachmentData, attachmentNames);
++
++            return switch (outcome.type()) {
++                case ACCEPTED -> ResponseEntity.accepted().body(Map.of(
++                        "status", "QUEUED",
++                        "deliveryId", outcome.deliveryId().toString(),
++                        "inboundMessageId", outcome.inboundMessageId().toString(),
++                        "acceptedCount", outcome.attachmentIds().size(),
++                        "attachmentIds", outcome.attachmentIds()));
++                case DUPLICATE -> ResponseEntity.accepted().body(Map.of(
++                        "status", "DUPLICATE",
++                        "deliveryId", outcome.deliveryId().toString(),
++                        "inboundMessageId", outcome.inboundMessageId() == null
++                                ? "" : outcome.inboundMessageId().toString(),
++                        "acceptedCount", outcome.attachmentIds().size(),
++                        "attachmentIds", outcome.attachmentIds()));
++                case PAYLOAD_CONFLICT -> ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
++                        "error", "Idempotency key already used with a different payload",
++                        "deliveryId", outcome.deliveryId().toString()));
++                case NONCE_REPLAY -> ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
++                        "error", "Webhook replay detected"));
++            };
++        } catch (org.springframework.dao.DataIntegrityViolationException e) {
++            // Concurrent race lost at the database level (the unique constraints
++            // arbitrated two simultaneous deliveries). The losing transaction
++            // has rolled back completely; resolve against the committed winner
++            // so an identical in-flight duplicate still gets the original result.
++            log.warn("Webhook delivery race resolved by database constraint: org={}, detail={}",
++                    organizationId, e.getMessage());
++            var existing = ingestionService.findDelivery(organizationId, idempotencyKey);
++            if (existing != null && bodySha256.equals(existing.getBodySha256())) {
++                return ResponseEntity.accepted().body(Map.of(
++                        "status", "DUPLICATE",
++                        "deliveryId", existing.getId().toString(),
++                        "inboundMessageId", existing.getInboundMessageId() == null
++                                ? "" : existing.getInboundMessageId().toString(),
++                        "acceptedCount", ingestionService.attachmentIdsOf(existing).size(),
++                        "attachmentIds", ingestionService.attachmentIdsOf(existing)));
++            }
++            if (existing != null) {
++                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
++                        "error", "Idempotency key already used with a different payload",
++                        "deliveryId", existing.getId().toString()));
++            }
++            return ResponseEntity.status(HttpStatus.CONFLICT)
++                    .body(Map.of("error", "Webhook delivery conflict"));
++        } catch (Exception e) {
++            log.error("Webhook ingest error: {}", e.getMessage(), e);
++            return ResponseEntity.internalServerError().body(Map.of("error", "Webhook processing failed"));
++        }
+     }
+-}
+ 
++    private String stringOrNull(Object value) {
++        if (value == null) return null;
++        String s = value.toString();
++        return s.isBlank() ? null : s;
++    }
++
++    private String truncate(String value, int maxLength) {
++        if (value == null) return null;
++        return value.length() <= maxLength ? value : value.substring(0, maxLength);
++    }
++
++    @SuppressWarnings("unchecked")
++    private <T> T attribute(HttpServletRequest request, String name) {
++        return (T) request.getAttribute(name);
++    }
++
++    private ResponseEntity<?> badRequest(String message) {
++        return ResponseEntity.badRequest().body(Map.of("error", message));
++    }
++
++    private ResponseEntity<?> payloadTooLarge(String message) {
++        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(Map.of("error", message));
++    }
++}
+diff --git a/src/main/java/com/kartgen/hireflow/mail/service/MessageIngestionService.java b/src/main/java/com/kartgen/hireflow/mail/service/MessageIngestionService.java
+index a0b6b20..07f33e6 100644
+--- a/src/main/java/com/kartgen/hireflow/mail/service/MessageIngestionService.java
++++ b/src/main/java/com/kartgen/hireflow/mail/service/MessageIngestionService.java
+@@ -198,25 +198,27 @@ public class MessageIngestionService {
+     }
+ 
+     // ── Channel 4: Forwarding Webhook ──
++    public record WebhookIngestResult(UUID messageId, List<UUID> attachmentIds) {}
++
++    /**
++     * One forwarded email becomes exactly ONE inbound message with N
++     * attachments and N parse jobs. The forwarding mailbox (forwarderEmail)
++     * and the claimed original sender (originalSenderEmail, optional) are
++     * stored as separate provenance fields; an absent original sender stays
++     * unknown (null) and is never invented.
++     */
+     @Transactional
+-    public List<UUID> ingestFromWebhook(UUID orgId, String senderEmail, String subject,
+-                                        String sourceType, List<byte[]> attachmentData,
+-                                        List<String> attachmentNames) {
+-        return ingestFromWebhook(orgId, senderEmail, subject, sourceType, attachmentData,
+-                attachmentNames, null);
+-    }
+-
+-    @Transactional
+-    public List<UUID> ingestFromWebhook(UUID orgId, String senderEmail, String subject,
+-                                        String sourceType, List<byte[]> attachmentData,
+-                                        List<String> attachmentNames, UUID jobId) {
+-        boolean isForwarded = isForwardedSource(senderEmail, subject, sourceType);
++    public WebhookIngestResult ingestFromWebhook(UUID orgId, String forwarderEmail,
++                                                 String originalSenderEmail, String subject,
++                                                 String sourceType, List<byte[]> attachmentData,
++                                                 List<String> attachmentNames, UUID jobId) {
++        boolean isForwarded = isForwardedSource(forwarderEmail, subject, sourceType);
+         String effectiveSourceType = isForwarded ? "FORWARDED" : "DIRECT";
+ 
+         InboundMessage message = InboundMessage.builder()
+                 .organizationId(orgId)
+-                .senderEmail(senderEmail)
+-                .originalSenderClaim(senderEmail)
++                .senderEmail(forwarderEmail)
++                .originalSenderClaim(originalSenderEmail)
+                 .subject(subject)
+                 .sourceType(effectiveSourceType)
+                 .jobId(jobId)
+@@ -255,7 +257,7 @@ public class MessageIngestionService {
+                 log.warn("Error processing webhook attachment {}: {}", fname, e.getMessage());
+             }
+         }
+-        return accepted;
++        return new WebhookIngestResult(message.getId(), accepted);
+     }
+ 
+     // ── Inline sync processing (used by the worker) ──
+diff --git a/src/main/java/com/kartgen/hireflow/security/MultipartBodyParser.java b/src/main/java/com/kartgen/hireflow/security/MultipartBodyParser.java
+new file mode 100644
+index 0000000..6b7ce90
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/security/MultipartBodyParser.java
+@@ -0,0 +1,211 @@
++package com.kartgen.hireflow.security;
++
++import jakarta.servlet.http.Part;
++import org.springframework.web.multipart.MultipartException;
++
++import java.io.ByteArrayInputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.UncheckedIOException;
++import java.nio.charset.StandardCharsets;
++import java.util.*;
++
++/**
++ * Minimal, strict-ish multipart/form-data parser over an in-memory byte
++ * array. Used by {@link WebhookBodyCachingRequestWrapper} so that parts
++ * remain parseable after the raw body has been consumed for HMAC
++ * verification.
++ *
++ * Supports: binary part bodies, quoted name/filename attributes,
++ * per-part Content-Type, CRLF and bare-LF line breaks. Does not write
++ * parts to disk - webhook bodies are capped by the caller.
++ */
++final class MultipartBodyParser {
++
++    private MultipartBodyParser() {}
++
++    static List<Part> parse(byte[] body, String contentType) {
++        String boundary = extractBoundary(contentType);
++        byte[] delimiter = ("--" + boundary).getBytes(StandardCharsets.US_ASCII);
++        List<Part> parts = new ArrayList<>();
++
++        int pos = indexOf(body, delimiter, 0);
++        if (pos < 0) {
++            throw new MultipartException("Malformed multipart body: boundary not found");
++        }
++        pos += delimiter.length;
++
++        while (true) {
++            if (matches(body, pos, "--")) {
++                break; // closing delimiter
++            }
++            pos = skipLineBreak(body, pos);
++
++            int headerEnd = findHeaderBodySeparator(body, pos);
++            if (headerEnd < 0) {
++                throw new MultipartException("Malformed multipart part: missing header terminator");
++            }
++            Map<String, List<String>> headers = parseHeaders(
++                    new String(body, pos, headerEnd - pos, StandardCharsets.UTF_8));
++            int contentStart = headerEnd + lineBreakLength(body, headerEnd);
++
++            int nextDelimiter = indexOf(body, delimiter, contentStart);
++            if (nextDelimiter < 0) {
++                throw new MultipartException("Malformed multipart body: unterminated part");
++            }
++            int contentEnd = nextDelimiter;
++            if (contentEnd > contentStart && body[contentEnd - 1] == '\n') contentEnd--;
++            if (contentEnd > contentStart && body[contentEnd - 1] == '\r') contentEnd--;
++
++            byte[] content = Arrays.copyOfRange(body, contentStart, contentEnd);
++            parts.add(new CachedPart(headers, content));
++            pos = nextDelimiter + delimiter.length;
++        }
++        return parts;
++    }
++
++    private static String extractBoundary(String contentType) {
++        for (String segment : contentType.split(";")) {
++            String trimmed = segment.trim();
++            if (trimmed.regionMatches(true, 0, "boundary=", 0, 9)) {
++                String boundary = trimmed.substring(9).trim();
++                if (boundary.length() >= 2 && boundary.startsWith("\"") && boundary.endsWith("\"")) {
++                    boundary = boundary.substring(1, boundary.length() - 1);
++                }
++                if (boundary.isEmpty()) {
++                    throw new MultipartException("Malformed multipart Content-Type: empty boundary");
++                }
++                return boundary;
++            }
++        }
++        throw new MultipartException("Malformed multipart Content-Type: boundary missing");
++    }
++
++    private static int findHeaderBodySeparator(byte[] body, int from) {
++        for (int i = from; i < body.length - 1; i++) {
++            if (body[i] == '\n') {
++                if (body[i + 1] == '\n') return i;              // LF LF -> headers end at first LF
++                if (body[i + 1] == '\r' && i + 3 < body.length
++                        && body[i + 2] == '\n' && body[i + 3] == '\n') {
++                    return i + 1;                               // LF CRLF variant
++                }
++            }
++            if (body[i] == '\r' && body[i + 1] == '\n'
++                    && i + 3 < body.length && body[i + 2] == '\r' && body[i + 3] == '\n') {
++                return i;                                       // CRLF CRLF
++            }
++        }
++        return -1;
++    }
++
++    private static int lineBreakLength(byte[] body, int separatorIndex) {
++        if (body[separatorIndex] == '\r') return 2;             // CRLF CRLF starts at CR
++        // LF LF (or LF CRLF LF): consume up to and including the second LF
++        return (body[separatorIndex + 1] == '\r') ? 3 : 2;
++    }
++
++    private static Map<String, List<String>> parseHeaders(String headerBlock) {
++        Map<String, List<String>> headers = new LinkedHashMap<>();
++        for (String line : headerBlock.split("\r\n|\n")) {
++            int colon = line.indexOf(':');
++            if (colon <= 0) continue;
++            String name = line.substring(0, colon).trim();
++            String value = line.substring(colon + 1).trim();
++            headers.computeIfAbsent(name.toLowerCase(Locale.ROOT), k -> new ArrayList<>()).add(value);
++        }
++        return headers;
++    }
++
++    private static int indexOf(byte[] haystack, byte[] needle, int from) {
++        if (needle.length == 0) return from;
++        outer:
++        for (int i = Math.max(from, 0); i <= haystack.length - needle.length; i++) {
++            for (int j = 0; j < needle.length; j++) {
++                if (haystack[i + j] != needle[j]) continue outer;
++            }
++            return i;
++        }
++        return -1;
++    }
++
++    private static boolean matches(byte[] body, int pos, String ascii) {
++        byte[] needle = ascii.getBytes(StandardCharsets.US_ASCII);
++        return pos >= 0 && pos + needle.length <= body.length && indexOf(body, needle, pos) == pos;
++    }
++
++    private static int skipLineBreak(byte[] body, int pos) {
++        if (pos < body.length && body[pos] == '\r') return pos + 2 <= body.length ? pos + 2 : pos + 1;
++        if (pos < body.length && body[pos] == '\n') return pos + 1;
++        return pos;
++    }
++
++    static final class CachedPart implements Part {
++
++        private final Map<String, List<String>> headers;
++        private final byte[] content;
++        private final String name;
++        private final String submittedFileName;
++        private final String contentType;
++
++        CachedPart(Map<String, List<String>> headers, byte[] content) {
++            this.headers = headers;
++            this.content = content;
++            String disposition = firstHeader(headers, "content-disposition");
++            this.name = attribute(disposition, "name");
++            this.submittedFileName = attribute(disposition, "filename");
++            this.contentType = firstHeader(headers, "content-type");
++        }
++
++        private static String firstHeader(Map<String, List<String>> headers, String lowerCaseName) {
++            List<String> values = headers.get(lowerCaseName);
++            return values == null || values.isEmpty() ? null : values.get(0);
++        }
++
++        private static String attribute(String disposition, String attribute) {
++            if (disposition == null) return null;
++            String search = attribute + "=\"";
++            int keyIndex = disposition.indexOf(search);
++            if (keyIndex < 0) return null;
++            int start = keyIndex + search.length();
++            StringBuilder value = new StringBuilder();
++            for (int i = start; i < disposition.length(); i++) {
++                char c = disposition.charAt(i);
++                if (c == '\\' && i + 1 < disposition.length()) {
++                    value.append(disposition.charAt(++i));
++                } else if (c == '"') {
++                    break;
++                } else {
++                    value.append(c);
++                }
++            }
++            return value.toString();
++        }
++
++        @Override public String getName() { return name; }
++
++        @Override public String getSubmittedFileName() { return submittedFileName; }
++
++        @Override public String getContentType() { return contentType; }
++
++        @Override public long getSize() { return content.length; }
++
++        @Override public InputStream getInputStream() {
++            return new ByteArrayInputStream(content);
++        }
++
++        @Override public void write(String fileName) throws IOException {
++            throw new IOException("write() is not supported for cached webhook parts");
++        }
++
++        @Override public void delete() { /* in-memory only */ }
++
++        @Override public String getHeader(String name) { return firstHeader(headers, name.toLowerCase(Locale.ROOT)); }
++
++        @Override public Collection<String> getHeaders(String name) {
++            List<String> values = headers.get(name.toLowerCase(Locale.ROOT));
++            return values == null ? List.of() : List.copyOf(values);
++        }
++
++        @Override public Collection<String> getHeaderNames() { return List.copyOf(headers.keySet()); }
++    }
++}
+diff --git a/src/main/java/com/kartgen/hireflow/security/WebhookAuthFilter.java b/src/main/java/com/kartgen/hireflow/security/WebhookAuthFilter.java
+index 498f8da..1475879 100644
+--- a/src/main/java/com/kartgen/hireflow/security/WebhookAuthFilter.java
++++ b/src/main/java/com/kartgen/hireflow/security/WebhookAuthFilter.java
+@@ -2,14 +2,21 @@ package com.kartgen.hireflow.security;
+ 
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import com.kartgen.hireflow.common.ApiError;
++import com.kartgen.hireflow.common.CryptoUtil;
++import com.kartgen.hireflow.common.HashUtil;
+ import com.kartgen.hireflow.common.TenantContext;
+ import com.kartgen.hireflow.config.HireFlowProperties;
++import com.kartgen.hireflow.tenant.Organization;
++import com.kartgen.hireflow.tenant.OrganizationRepository;
++import com.kartgen.hireflow.webhook.WebhookCredential;
++import com.kartgen.hireflow.webhook.WebhookCredentialRepository;
+ import jakarta.servlet.FilterChain;
+ import jakarta.servlet.ServletException;
+ import jakarta.servlet.http.HttpServletRequest;
+ import jakarta.servlet.http.HttpServletResponse;
+ import lombok.RequiredArgsConstructor;
+ import lombok.extern.slf4j.Slf4j;
++import org.springframework.dao.DataAccessException;
+ import org.springframework.http.HttpStatus;
+ import org.springframework.http.MediaType;
+ import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+@@ -18,28 +25,68 @@ import org.springframework.security.core.context.SecurityContextHolder;
+ import org.springframework.stereotype.Component;
+ import org.springframework.web.filter.OncePerRequestFilter;
+ 
++import javax.crypto.Mac;
++import javax.crypto.spec.SecretKeySpec;
+ import java.io.IOException;
+ import java.nio.charset.StandardCharsets;
+ import java.security.MessageDigest;
+ import java.util.List;
++import java.util.Locale;
+ import java.util.UUID;
++import java.util.regex.Pattern;
+ 
+ /**
+- * Authenticates inbound forwarding webhooks with a shared secret instead of a
+- * user session. Requests must carry X-HireFlow-Webhook-Secret and
+- * X-HireFlow-Org-Id. Constant-time comparison avoids secret-length timing leaks.
++ * Authenticates inbound forwarding webhooks using per-organization
++ * credentials and an HMAC-SHA256 request signature.
++ *
++ * Required headers:
++ *   X-HireFlow-Org-Id     - organization the credential belongs to (selection hint only;
++ *                           the verified credential must belong to this organization)
++ *   X-HireFlow-Key-Id     - public credential identifier
++ *   X-HireFlow-Timestamp  - epoch seconds, within the replay window
++ *   X-HireFlow-Nonce      - cryptographically random, unique per delivery (durable)
++ *   X-HireFlow-Signature  - hex HMAC-SHA256 over the canonical string (see docs/webhook-security.md)
++ *   Idempotency-Key       - stable logical delivery identifier (durable, unique per organization)
++ *
++ * The signature covers: protocol version, organization id, key id, timestamp,
++ * nonce, HTTP method, request path, idempotency key and the SHA-256 digest of
++ * the exact raw request body (computed by this filter from the received bytes).
++ *
++ * The webhook principal carries only ROLE_WEBHOOK - it can never gain
++ * interactive-user authorities. Lookups and decryption fail closed with a
++ * sanitized 503. No secret value is ever logged or included in responses.
+  */
+ @Slf4j
+ @Component
+ @RequiredArgsConstructor
+ public class WebhookAuthFilter extends OncePerRequestFilter {
+ 
+-    public static final String SECRET_HEADER = "X-HireFlow-Webhook-Secret";
+     public static final String ORG_HEADER = "X-HireFlow-Org-Id";
++    public static final String KEY_ID_HEADER = "X-HireFlow-Key-Id";
++    public static final String TIMESTAMP_HEADER = "X-HireFlow-Timestamp";
++    public static final String NONCE_HEADER = "X-HireFlow-Nonce";
++    public static final String SIGNATURE_HEADER = "X-HireFlow-Signature";
++    public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
++    public static final String SIGNATURE_VERSION = "v1";
++
++    public static final String ATTR_ORG_ID = "webhook.orgId";
++    public static final String ATTR_CREDENTIAL_ID = "webhook.credentialId";
++    public static final String ATTR_KEY_ID = "webhook.keyId";
++    public static final String ATTR_BODY_SHA256 = "webhook.bodySha256";
++    public static final String ATTR_NONCE = "webhook.nonce";
++    public static final String ATTR_IDEMPOTENCY_KEY = "webhook.idempotencyKey";
++
++    static final String WEBHOOK_AUTHORITY = "ROLE_WEBHOOK";
++
++    private static final Pattern KEY_ID_PATTERN = Pattern.compile("^whk_[0-9a-f]{16}$");
++    private static final Pattern NONCE_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{16,128}$");
++    private static final Pattern SIGNATURE_PATTERN = Pattern.compile("^[0-9a-f]{64}$");
++    private static final Pattern IDEMPOTENCY_KEY_PATTERN = Pattern.compile("^[A-Za-z0-9._-]{8,200}$");
+ 
+     private final HireFlowProperties props;
+     private final ObjectMapper objectMapper;
+-    private final com.kartgen.hireflow.tenant.OrganizationRepository organizationRepo;
++    private final OrganizationRepository organizationRepo;
++    private final WebhookCredentialRepository credentialRepo;
+ 
+     @Override
+     protected boolean shouldNotFilter(HttpServletRequest request) {
+@@ -51,62 +98,174 @@ public class WebhookAuthFilter extends OncePerRequestFilter {
+                                     FilterChain chain) throws ServletException, IOException {
+         try {
+             if (!props.getWebhook().isEnabled()) {
+-                writeError(response, request, HttpStatus.SERVICE_UNAVAILABLE,
+-                        "Webhook intake is disabled");
++                writeError(response, request, HttpStatus.SERVICE_UNAVAILABLE, "Webhook intake is disabled");
+                 return;
+             }
+ 
+-            String supplied = request.getHeader(SECRET_HEADER);
+-            if (supplied == null || supplied.isBlank()) {
+-                writeError(response, request, HttpStatus.UNAUTHORIZED,
+-                        "Missing webhook authentication");
++            String orgHeader = request.getHeader(ORG_HEADER);
++            String keyId = request.getHeader(KEY_ID_HEADER);
++            String timestamp = request.getHeader(TIMESTAMP_HEADER);
++            String nonce = request.getHeader(NONCE_HEADER);
++            String signature = request.getHeader(SIGNATURE_HEADER);
++            String idempotencyKey = request.getHeader(IDEMPOTENCY_KEY_HEADER);
++
++            if (isBlank(orgHeader) || isBlank(keyId) || isBlank(timestamp)
++                    || isBlank(nonce) || isBlank(signature)) {
++                writeError(response, request, HttpStatus.UNAUTHORIZED, "Missing webhook authentication");
+                 return;
+             }
+-            String expected = props.getWebhook().getSecret();
+-            if (!constantTimeEquals(supplied, expected)) {
+-                log.warn("Rejected webhook with invalid shared secret from {}", request.getRemoteAddr());
+-                writeError(response, request, HttpStatus.UNAUTHORIZED,
+-                        "Invalid webhook authentication");
++            if (isBlank(idempotencyKey)) {
++                writeError(response, request, HttpStatus.BAD_REQUEST, "Missing " + IDEMPOTENCY_KEY_HEADER + " header");
+                 return;
+             }
+ 
+-            String orgHeader = request.getHeader(ORG_HEADER);
+-            if (orgHeader == null || orgHeader.isBlank()) {
+-                writeError(response, request, HttpStatus.BAD_REQUEST,
+-                        "Missing " + ORG_HEADER + " header");
++            UUID organizationId;
++            try {
++                organizationId = UUID.fromString(orgHeader.trim());
++            } catch (IllegalArgumentException e) {
++                writeError(response, request, HttpStatus.UNAUTHORIZED, "Invalid webhook authentication");
++                return;
++            }
++            if (!KEY_ID_PATTERN.matcher(keyId).matches()
++                    || !NONCE_PATTERN.matcher(nonce).matches()
++                    || !SIGNATURE_PATTERN.matcher(signature).matches()
++                    || !IDEMPOTENCY_KEY_PATTERN.matcher(idempotencyKey).matches()) {
++                writeError(response, request, HttpStatus.UNAUTHORIZED, "Invalid webhook authentication");
+                 return;
+             }
+ 
+-            UUID orgId;
++            // Buffer the raw body (bounded) so the signature can cover the exact
++            // received bytes and the controller can still parse the request.
++            WebhookBodyCachingRequestWrapper wrappedRequest =
++                    new WebhookBodyCachingRequestWrapper(request, props.getWebhook().getMaxBodyBytes());
++            String bodySha256 = HashUtil.sha256Hex(wrappedRequest.getContentAsByteArray());
++
++            WebhookCredential credential;
+             try {
+-                orgId = UUID.fromString(orgHeader.trim());
+-            } catch (IllegalArgumentException e) {
+-                writeError(response, request, HttpStatus.BAD_REQUEST,
+-                        "Invalid " + ORG_HEADER + " header");
++                credential = credentialRepo.findByKeyId(keyId).orElse(null);
++            } catch (DataAccessException e) {
++                log.error("Webhook credential lookup failed (fail closed): {}", e.getMessage());
++                writeError(response, request, HttpStatus.SERVICE_UNAVAILABLE,
++                        "Webhook authentication temporarily unavailable");
++                return;
++            }
++            // Generic responses: never disclose whether the key exists, belongs to
++            // another organization, was revoked, or failed signature verification.
++            if (credential == null
++                    || !credential.getOrganizationId().equals(organizationId)
++                    || !WebhookCredential.STATUS_ACTIVE.equals(credential.getStatus())) {
++                writeError(response, request, HttpStatus.UNAUTHORIZED, "Invalid webhook authentication");
+                 return;
+             }
+ 
+-            var org = organizationRepo.findById(orgId).orElse(null);
+-            if (org == null || !"ACTIVE".equals(org.getStatus())) {
+-                writeError(response, request, HttpStatus.FORBIDDEN,
+-                        "Organization not found or inactive: " + orgId);
++            long requestTimestamp;
++            try {
++                requestTimestamp = Long.parseLong(timestamp.trim());
++            } catch (NumberFormatException e) {
++                writeError(response, request, HttpStatus.UNAUTHORIZED, "Invalid webhook authentication");
++                return;
++            }
++            long now = System.currentTimeMillis() / 1000L;
++            long window = props.getWebhook().getReplayWindowSeconds();
++            if (requestTimestamp < now - window || requestTimestamp > now + window) {
++                writeError(response, request, HttpStatus.UNAUTHORIZED, "Webhook timestamp outside allowed window");
+                 return;
+             }
+ 
+-            TenantContext.setOrganizationId(orgId);
++            String expectedSignature;
++            try {
++                String secret = CryptoUtil.decrypt(
++                        credential.getEncryptedSecret(), props.getCrypto().getSecretKey());
++                expectedSignature = hmacSha256Hex(secret, canonicalString(
++                        organizationId, keyId, timestamp.trim(), nonce,
++                        request.getMethod().toUpperCase(Locale.ROOT),
++                        request.getRequestURI(), idempotencyKey, bodySha256));
++            } catch (IllegalStateException | DataAccessException e) {
++                // Decryption or infrastructure failure must never fail open.
++                log.error("Webhook signature preparation failed (fail closed): {}", e.getMessage());
++                writeError(response, request, HttpStatus.SERVICE_UNAVAILABLE,
++                        "Webhook authentication temporarily unavailable");
++                return;
++            }
++            if (!MessageDigest.isEqual(
++                    expectedSignature.getBytes(StandardCharsets.US_ASCII),
++                    signature.getBytes(StandardCharsets.US_ASCII))) {
++                writeError(response, request, HttpStatus.UNAUTHORIZED, "Invalid webhook authentication");
++                return;
++            }
++
++            Organization organization;
++            try {
++                organization = organizationRepo.findById(organizationId).orElse(null);
++            } catch (DataAccessException e) {
++                log.error("Webhook organization lookup failed (fail closed): {}", e.getMessage());
++                writeError(response, request, HttpStatus.SERVICE_UNAVAILABLE,
++                        "Webhook authentication temporarily unavailable");
++                return;
++            }
++            if (organization == null || !"ACTIVE".equals(organization.getStatus())) {
++                writeError(response, request, HttpStatus.FORBIDDEN, "Organization not found or inactive");
++                return;
++            }
++
++            TenantContext.setOrganizationId(organizationId);
+             var auth = new UsernamePasswordAuthenticationToken(
+-                    "webhook", null, List.of(new SimpleGrantedAuthority("ROLE_WEBHOOK")));
++                    "webhook:" + keyId, null, List.of(new SimpleGrantedAuthority(WEBHOOK_AUTHORITY)));
+             SecurityContextHolder.getContext().setAuthentication(auth);
+ 
+-            chain.doFilter(request, response);
++            wrappedRequest.setAttribute(ATTR_ORG_ID, organizationId);
++            wrappedRequest.setAttribute(ATTR_CREDENTIAL_ID, credential.getId());
++            wrappedRequest.setAttribute(ATTR_KEY_ID, keyId);
++            wrappedRequest.setAttribute(ATTR_BODY_SHA256, bodySha256);
++            wrappedRequest.setAttribute(ATTR_NONCE, nonce);
++            wrappedRequest.setAttribute(ATTR_IDEMPOTENCY_KEY, idempotencyKey);
++
++            chain.doFilter(wrappedRequest, response);
++        } catch (WebhookBodyCachingRequestWrapper.RequestBodyTooLargeException e) {
++            writeError(response, request, HttpStatus.PAYLOAD_TOO_LARGE, "Webhook payload too large");
+         } finally {
+             TenantContext.clear();
++            SecurityContextHolder.clearContext();
++        }
++    }
++
++    /**
++     * Canonical signing string. Byte-exact contract with senders - documented
++     * in docs/webhook-security.md and covered by integration tests.
++     */
++    static String canonicalString(UUID organizationId, String keyId, String timestamp, String nonce,
++                                  String method, String requestPath, String idempotencyKey,
++                                  String bodySha256Hex) {
++        return String.join("\n",
++                SIGNATURE_VERSION,
++                organizationId.toString(),
++                keyId,
++                timestamp,
++                nonce,
++                method,
++                requestPath,
++                idempotencyKey,
++                bodySha256Hex);
++    }
++
++    static String hmacSha256Hex(String secret, String payload) {
++        try {
++            Mac mac = Mac.getInstance("HmacSHA256");
++            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
++            byte[] digest = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
++            StringBuilder hex = new StringBuilder(digest.length * 2);
++            for (byte b : digest) {
++                hex.append(Character.forDigit((b >> 4) & 0xF, 16));
++                hex.append(Character.forDigit(b & 0xF, 16));
++            }
++            return hex.toString();
++        } catch (Exception e) {
++            throw new IllegalStateException("HMAC computation failed", e);
+         }
+     }
+ 
+-    private boolean constantTimeEquals(String a, String b) {
+-        return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8),
+-                b.getBytes(StandardCharsets.UTF_8));
++    private static boolean isBlank(String value) {
++        return value == null || value.isBlank();
+     }
+ 
+     private void writeError(HttpServletResponse response, HttpServletRequest request,
+diff --git a/src/main/java/com/kartgen/hireflow/security/WebhookBodyCachingRequestWrapper.java b/src/main/java/com/kartgen/hireflow/security/WebhookBodyCachingRequestWrapper.java
+new file mode 100644
+index 0000000..5e41008
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/security/WebhookBodyCachingRequestWrapper.java
+@@ -0,0 +1,113 @@
++package com.kartgen.hireflow.security;
++
++import jakarta.servlet.ReadListener;
++import jakarta.servlet.ServletException;
++import jakarta.servlet.ServletInputStream;
++import jakarta.servlet.http.HttpServletRequest;
++import jakarta.servlet.http.HttpServletRequestWrapper;
++import jakarta.servlet.http.Part;
++import org.springframework.web.multipart.MultipartException;
++
++import java.io.*;
++import java.nio.charset.StandardCharsets;
++import java.util.*;
++
++/**
++ * Bounded, replayable request wrapper for webhook authentication.
++ *
++ * The HMAC signature must cover the exact raw request bytes, so the
++ * filter reads (and caches, up to a hard maximum) the full body before
++ * Spring MVC parses it. This wrapper then:
++ *  - replays the cached bytes to downstream consumers via
++ *    getInputStream()/getReader(),
++ *  - re-implements getParts()/getPart() over the cached bytes for
++ *    multipart/form-data, because the servlet container would otherwise
++ *    try to parse from the already-consumed connector stream,
++ *  - preserves the original Content-Type and all other headers.
++ *
++ * Buffering is bounded by maxBodyBytes; larger bodies fail fast with
++ * RequestBodyTooLargeException before any expensive processing.
++ */
++public class WebhookBodyCachingRequestWrapper extends HttpServletRequestWrapper {
++
++    private final byte[] body;
++    private Collection<Part> parsedParts;
++
++    public WebhookBodyCachingRequestWrapper(HttpServletRequest request, long maxBodyBytes) throws IOException {
++        super(request);
++        InputStream in = super.getInputStream();
++        ByteArrayOutputStream buffer = new ByteArrayOutputStream(16 * 1024);
++        byte[] chunk = new byte[8192];
++        long total = 0;
++        int read;
++        while ((read = in.read(chunk)) != -1) {
++            total += read;
++            if (total > maxBodyBytes) {
++                throw new RequestBodyTooLargeException(maxBodyBytes);
++            }
++            buffer.write(chunk, 0, read);
++        }
++        this.body = buffer.toByteArray();
++    }
++
++    public byte[] getContentAsByteArray() {
++        return body;
++    }
++
++    @Override
++    public ServletInputStream getInputStream() {
++        ByteArrayInputStream source = new ByteArrayInputStream(body);
++        return new ServletInputStream() {
++            @Override
++            public boolean isFinished() { return source.available() == 0; }
++
++            @Override
++            public boolean isReady() { return true; }
++
++            @Override
++            public void setReadListener(ReadListener readListener) {
++                throw new UnsupportedOperationException("Async reads are not supported for webhook requests");
++            }
++
++            @Override
++            public int read() { return source.read(); }
++
++            @Override
++            public int read(byte[] b, int off, int len) { return source.read(b, off, len); }
++        };
++    }
++
++    @Override
++    public BufferedReader getReader() {
++        return new BufferedReader(new InputStreamReader(getInputStream(), StandardCharsets.UTF_8));
++    }
++
++    @Override
++    public Collection<Part> getParts() throws IOException, ServletException {
++        String contentType = getContentType();
++        if (contentType != null && contentType.toLowerCase(Locale.ROOT).startsWith("multipart/form-data")) {
++            if (parsedParts == null) {
++                parsedParts = MultipartBodyParser.parse(body, contentType);
++            }
++            return parsedParts;
++        }
++        return super.getParts();
++    }
++
++    @Override
++    public Part getPart(String name) throws IOException, ServletException {
++        for (Part part : getParts()) {
++            if (part.getName().equals(name)) {
++                return part;
++            }
++        }
++        return null;
++    }
++
++    /** Thrown when the raw body exceeds the configured maximum before buffering completes. */
++    public static class RequestBodyTooLargeException extends RuntimeException {
++        public RequestBodyTooLargeException(long maxBodyBytes) {
++            super("Webhook body exceeds maximum of " + maxBodyBytes + " bytes");
++        }
++    }
++}
+diff --git a/src/main/java/com/kartgen/hireflow/webhook/LocalWebhookDevCredentialSeeder.java b/src/main/java/com/kartgen/hireflow/webhook/LocalWebhookDevCredentialSeeder.java
+new file mode 100644
+index 0000000..eb16556
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/webhook/LocalWebhookDevCredentialSeeder.java
+@@ -0,0 +1,56 @@
++package com.kartgen.hireflow.webhook;
++
++import com.kartgen.hireflow.common.CryptoUtil;
++import com.kartgen.hireflow.config.HireFlowProperties;
++import lombok.RequiredArgsConstructor;
++import lombok.extern.slf4j.Slf4j;
++import org.springframework.boot.ApplicationArguments;
++import org.springframework.boot.ApplicationRunner;
++import org.springframework.context.annotation.Profile;
++import org.springframework.stereotype.Component;
++
++import java.util.UUID;
++
++/**
++ * LOCAL DEVELOPMENT ONLY (profile "local").
++ *
++ * Provisions a stable webhook credential for the seeded demo organization so
++ * developers can exercise the signed webhook contract without calling the
++ * credential API first. The secret comes from the local-only
++ * `hireflow.webhook.local-dev-secret` property, is stored encrypted at rest
++ * like any other credential, and is NEVER logged.
++ *
++ * This seeder does not exist in the prod profile; production credentials are
++ * provisioned exclusively through POST /api/v1/webhook-credentials by an
++ * authenticated OWNER or ADMIN. The legacy global shared secret
++ * (X-HireFlow-Webhook-Secret) is retired: no profile accepts it.
++ */
++@Slf4j
++@Component
++@Profile("local")
++@RequiredArgsConstructor
++public class LocalWebhookDevCredentialSeeder implements ApplicationRunner {
++
++    /** Stable key id for the local demo credential (16 hex chars after the prefix). */
++    public static final String LOCAL_DEMO_KEY_ID = "whk_0a11c0de00000001";
++    private static final String LOCAL_DEMO_ORG_ID = "11111111-1111-1111-1111-111111111111";
++
++    private final WebhookCredentialRepository credentialRepo;
++    private final HireFlowProperties props;
++
++    @Override
++    public void run(ApplicationArguments args) {
++        String keyId = LOCAL_DEMO_KEY_ID;
++        if (credentialRepo.findByKeyId(keyId).isPresent()) {
++            return;
++        }
++        credentialRepo.save(WebhookCredential.builder()
++                .organizationId(UUID.fromString(LOCAL_DEMO_ORG_ID))
++                .keyId(keyId)
++                .encryptedSecret(CryptoUtil.encrypt(
++                        props.getWebhook().getLocalDevSecret(), props.getCrypto().getSecretKey()))
++                .status(WebhookCredential.STATUS_ACTIVE)
++                .build());
++        log.info("Local development webhook credential ready: keyId={} org={}", keyId, LOCAL_DEMO_ORG_ID);
++    }
++}
+diff --git a/src/main/java/com/kartgen/hireflow/webhook/WebhookCredential.java b/src/main/java/com/kartgen/hireflow/webhook/WebhookCredential.java
+new file mode 100644
+index 0000000..94f5464
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/webhook/WebhookCredential.java
+@@ -0,0 +1,52 @@
++package com.kartgen.hireflow.webhook;
++
++import jakarta.persistence.*;
++import lombok.*;
++import java.time.Instant;
++import java.util.UUID;
++
++/**
++ * Per-organization webhook credential. The raw secret only exists at
++ * creation/rotation time in the API response; the database stores it
++ * encrypted at rest (AES-256-GCM via CryptoUtil).
++ */
++@Entity
++@Table(name = "webhook_credentials")
++@Data @NoArgsConstructor @AllArgsConstructor @Builder
++public class WebhookCredential {
++
++    public static final String STATUS_ACTIVE = "ACTIVE";
++    public static final String STATUS_REVOKED = "REVOKED";
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.UUID)
++    private UUID id;
++
++    @Column(name = "organization_id", nullable = false)
++    private UUID organizationId;
++
++    /** Public identifier of this credential; selects the secret for verification. */
++    @Column(name = "key_id", nullable = false, length = 64, unique = true)
++    private String keyId;
++
++    /** AES-256-GCM encrypted secret (base64 iv+ciphertext+tag). Never plaintext. */
++    @Column(name = "encrypted_secret", nullable = false, length = 512)
++    private String encryptedSecret;
++
++    @Column(nullable = false, length = 24)
++    @Builder.Default
++    private String status = STATUS_ACTIVE;
++
++    @Column(name = "created_at", nullable = false)
++    @Builder.Default
++    private Instant createdAt = Instant.now();
++
++    @Column(name = "created_by")
++    private UUID createdBy;
++
++    @Column(name = "revoked_at")
++    private Instant revokedAt;
++
++    @Column(name = "revoked_by")
++    private UUID revokedBy;
++}
+diff --git a/src/main/java/com/kartgen/hireflow/webhook/WebhookCredentialController.java b/src/main/java/com/kartgen/hireflow/webhook/WebhookCredentialController.java
+new file mode 100644
+index 0000000..af7ec81
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/webhook/WebhookCredentialController.java
+@@ -0,0 +1,148 @@
++package com.kartgen.hireflow.webhook;
++
++import com.kartgen.hireflow.common.CryptoUtil;
++import com.kartgen.hireflow.common.TenantContext;
++import com.kartgen.hireflow.config.HireFlowProperties;
++import lombok.RequiredArgsConstructor;
++import lombok.extern.slf4j.Slf4j;
++import org.springframework.http.ResponseEntity;
++import org.springframework.security.access.prepost.PreAuthorize;
++import org.springframework.web.bind.annotation.*;
++
++import java.security.SecureRandom;
++import java.time.Instant;
++import java.util.*;
++
++/**
++ * Lifecycle for per-organization webhook credentials. Requires an
++ * authenticated OWNER or ADMIN of the organization resolved from the
++ * verified TenantContext (never a caller-supplied tenant id).
++ *
++ * The raw secret is returned exactly once per create/rotate and is stored
++ * only in encrypted form. It is never returned by list endpoints and is
++ * never logged.
++ */
++@Slf4j
++@RestController
++@RequestMapping("/api/v1/webhook-credentials")
++@RequiredArgsConstructor
++public class WebhookCredentialController {
++
++    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
++
++    private final WebhookCredentialRepository credentialRepo;
++    private final HireFlowProperties props;
++
++    public record CreatedCredential(String keyId, String secret) {}
++
++    public record CredentialDto(String keyId, String status, String createdAt,
++                                String revokedAt, UUID createdBy) {}
++
++    @PostMapping
++    @PreAuthorize("hasAnyRole('OWNER','ADMIN')")
++    public ResponseEntity<?> create() {
++        UUID orgId = requireOrg();
++        String secret = generateSecret();
++        WebhookCredential credential = WebhookCredential.builder()
++                .organizationId(orgId)
++                .keyId(generateKeyId())
++                .encryptedSecret(CryptoUtil.encrypt(secret, cryptoKey()))
++                .status(WebhookCredential.STATUS_ACTIVE)
++                .createdBy(TenantContext.getUserId())
++                .build();
++        credentialRepo.save(credential);
++        log.info("Created webhook credential keyId={} org={}", credential.getKeyId(), orgId);
++        return ResponseEntity.ok(new CreatedCredential(credential.getKeyId(), secret));
++    }
++
++    /** Revokes the current credential and issues a replacement in one step. */
++    @PostMapping("/{keyId}/rotate")
++    @PreAuthorize("hasAnyRole('OWNER','ADMIN')")
++    public ResponseEntity<?> rotate(@PathVariable String keyId) {
++        UUID orgId = requireOrg();
++        WebhookCredential existing = credentialRepo.findByKeyId(keyId).orElse(null);
++        if (existing == null || !existing.getOrganizationId().equals(orgId)) {
++            return ResponseEntity.notFound().build();
++        }
++        if (!WebhookCredential.STATUS_REVOKED.equals(existing.getStatus())) {
++            existing.setStatus(WebhookCredential.STATUS_REVOKED);
++            existing.setRevokedAt(Instant.now());
++            existing.setRevokedBy(TenantContext.getUserId());
++            credentialRepo.save(existing);
++        }
++
++        String secret = generateSecret();
++        WebhookCredential replacement = WebhookCredential.builder()
++                .organizationId(orgId)
++                .keyId(generateKeyId())
++                .encryptedSecret(CryptoUtil.encrypt(secret, cryptoKey()))
++                .status(WebhookCredential.STATUS_ACTIVE)
++                .createdBy(TenantContext.getUserId())
++                .build();
++        credentialRepo.save(replacement);
++        log.info("Rotated webhook credential oldKeyId={} newKeyId={} org={}",
++                keyId, replacement.getKeyId(), orgId);
++        return ResponseEntity.ok(new CreatedCredential(replacement.getKeyId(), secret));
++    }
++
++    @PostMapping("/{keyId}/revoke")
++    @PreAuthorize("hasAnyRole('OWNER','ADMIN')")
++    public ResponseEntity<?> revoke(@PathVariable String keyId) {
++        UUID orgId = requireOrg();
++        WebhookCredential credential = credentialRepo.findByKeyId(keyId).orElse(null);
++        if (credential == null || !credential.getOrganizationId().equals(orgId)) {
++            return ResponseEntity.notFound().build();
++        }
++        credential.setStatus(WebhookCredential.STATUS_REVOKED);
++        credential.setRevokedAt(Instant.now());
++        credential.setRevokedBy(TenantContext.getUserId());
++        credentialRepo.save(credential);
++        log.info("Revoked webhook credential keyId={} org={}", keyId, orgId);
++        return ResponseEntity.ok(Map.of("keyId", keyId, "status", WebhookCredential.STATUS_REVOKED));
++    }
++
++    /** Lists credential metadata only - never the secret. */
++    @GetMapping
++    @PreAuthorize("hasAnyRole('OWNER','ADMIN')")
++    public ResponseEntity<?> list() {
++        UUID orgId = requireOrg();
++        List<CredentialDto> dtos = credentialRepo.findByOrganizationIdOrderByCreatedAtDesc(orgId)
++                .stream()
++                .map(c -> new CredentialDto(
++                        c.getKeyId(), c.getStatus(),
++                        c.getCreatedAt().toString(),
++                        c.getRevokedAt() == null ? null : c.getRevokedAt().toString(),
++                        c.getCreatedBy()))
++                .toList();
++        return ResponseEntity.ok(dtos);
++    }
++
++    private UUID requireOrg() {
++        UUID orgId = TenantContext.getOrganizationId();
++        if (orgId == null) {
++            throw new IllegalStateException("Organization context missing");
++        }
++        return orgId;
++    }
++
++    private String cryptoKey() {
++        return props.getCrypto().getSecretKey();
++    }
++
++    private String generateSecret() {
++        // 32 bytes = 256 bits of entropy, base64url encoded (43 chars).
++        byte[] raw = new byte[32];
++        SECURE_RANDOM.nextBytes(raw);
++        return Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
++    }
++
++    private String generateKeyId() {
++        byte[] raw = new byte[8];
++        SECURE_RANDOM.nextBytes(raw);
++        StringBuilder hex = new StringBuilder("whk_");
++        for (byte b : raw) {
++            hex.append(String.format("%02x", b));
++        }
++        return hex.toString();
++    }
++}
+diff --git a/src/main/java/com/kartgen/hireflow/webhook/WebhookCredentialRepository.java b/src/main/java/com/kartgen/hireflow/webhook/WebhookCredentialRepository.java
+new file mode 100644
+index 0000000..1a2b0ae
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/webhook/WebhookCredentialRepository.java
+@@ -0,0 +1,14 @@
++package com.kartgen.hireflow.webhook;
++
++import org.springframework.data.jpa.repository.JpaRepository;
++
++import java.util.List;
++import java.util.Optional;
++import java.util.UUID;
++
++public interface WebhookCredentialRepository extends JpaRepository<WebhookCredential, UUID> {
++
++    Optional<WebhookCredential> findByKeyId(String keyId);
++
++    List<WebhookCredential> findByOrganizationIdOrderByCreatedAtDesc(UUID organizationId);
++}
+diff --git a/src/main/java/com/kartgen/hireflow/webhook/WebhookDelivery.java b/src/main/java/com/kartgen/hireflow/webhook/WebhookDelivery.java
+new file mode 100644
+index 0000000..8afe5c4
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/webhook/WebhookDelivery.java
+@@ -0,0 +1,53 @@
++package com.kartgen.hireflow.webhook;
++
++import jakarta.persistence.*;
++import lombok.*;
++import java.time.Instant;
++import java.util.UUID;
++
++/**
++ * Durable record of one authenticated webhook delivery. Doubles as the
++ * replay guard (organization + credential + nonce uniqueness) and the
++ * idempotency ledger (organization + idempotency key uniqueness).
++ *
++ * Rows are inserted in the same transaction as the inbound message,
++ * attachments and processing jobs they guard.
++ */
++@Entity
++@Table(name = "webhook_deliveries")
++@Data @NoArgsConstructor @AllArgsConstructor @Builder
++public class WebhookDelivery {
++
++    public static final String STATUS_PROCESSING = "PROCESSING";
++    public static final String STATUS_ACCEPTED = "ACCEPTED";
++
++    @Id
++    @GeneratedValue(strategy = GenerationType.UUID)
++    private UUID id;
++
++    @Column(name = "organization_id", nullable = false)
++    private UUID organizationId;
++
++    @Column(name = "credential_id", nullable = false)
++    private UUID credentialId;
++
++    @Column(name = "idempotency_key", nullable = false, length = 200)
++    private String idempotencyKey;
++
++    @Column(nullable = false, length = 128)
++    private String nonce;
++
++    /** SHA-256 hex of the exact raw request body that was authenticated. */
++    @Column(name = "body_sha256", nullable = false, length = 64)
++    private String bodySha256;
++
++    @Column(nullable = false, length = 24)
++    private String status;
++
++    @Column(name = "inbound_message_id")
++    private UUID inboundMessageId;
++
++    @Column(name = "created_at", nullable = false)
++    @Builder.Default
++    private Instant createdAt = Instant.now();
++}
+diff --git a/src/main/java/com/kartgen/hireflow/webhook/WebhookDeliveryRepository.java b/src/main/java/com/kartgen/hireflow/webhook/WebhookDeliveryRepository.java
+new file mode 100644
+index 0000000..b5c94f2
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/webhook/WebhookDeliveryRepository.java
+@@ -0,0 +1,16 @@
++package com.kartgen.hireflow.webhook;
++
++import org.springframework.data.jpa.repository.JpaRepository;
++
++import java.util.Optional;
++import java.util.UUID;
++
++public interface WebhookDeliveryRepository extends JpaRepository<WebhookDelivery, UUID> {
++
++    Optional<WebhookDelivery> findByOrganizationIdAndIdempotencyKey(UUID organizationId, String idempotencyKey);
++
++    Optional<WebhookDelivery> findByOrganizationIdAndCredentialIdAndNonce(
++            UUID organizationId, UUID credentialId, String nonce);
++
++    long countByOrganizationId(UUID organizationId);
++}
+diff --git a/src/main/java/com/kartgen/hireflow/webhook/WebhookDeliveryStore.java b/src/main/java/com/kartgen/hireflow/webhook/WebhookDeliveryStore.java
+new file mode 100644
+index 0000000..a62c56d
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/webhook/WebhookDeliveryStore.java
+@@ -0,0 +1,71 @@
++package com.kartgen.hireflow.webhook;
++
++import lombok.RequiredArgsConstructor;
++import org.springframework.jdbc.core.JdbcTemplate;
++import org.springframework.stereotype.Component;
++import org.springframework.transaction.annotation.Propagation;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.sql.Timestamp;
++import java.time.Instant;
++import java.util.UUID;
++
++/**
++ * JDBC-based reservation of the durable idempotency ledger.
++ *
++ * The insert is expressed as a dialect-neutral
++ * {@code INSERT ... SELECT ... WHERE NOT EXISTS}, which works identically on
++ * H2 (PostgreSQL mode) and PostgreSQL. Committed duplicates insert zero rows
++ * without raising an exception, so the caller's transaction stays healthy and
++ * can respond with the original outcome. True concurrent races are arbitrated
++ * by the unique constraints on (organization_id, idempotency_key) and
++ * (organization_id, credential_id, nonce): the loser receives a
++ * DataIntegrityViolationException after the winner commits, which the
++ * controller resolves against the committed row (202 duplicate or 409) -
++ * never a second ingestion chain.
++ *
++ * This component always runs inside the caller's transaction so that the
++ * reservation, the inbound message, its attachments and the processing jobs
++ * commit (or roll back) as one atomic unit.
++ */
++@Component
++@RequiredArgsConstructor
++public class WebhookDeliveryStore {
++
++    private final JdbcTemplate jdbcTemplate;
++
++    /**
++     * Attempts to reserve the delivery row.
++     *
++     * @return true if this call inserted the row (caller owns the
++     *         delivery), false if a delivery with the same
++     *         organization + idempotency key already exists.
++     */
++    @Transactional(propagation = Propagation.MANDATORY)
++    public boolean tryReserve(UUID id, UUID organizationId, UUID credentialId,
++                              String idempotencyKey, String nonce,
++                              String bodySha256, Instant createdAt) {
++        int inserted = jdbcTemplate.update("""
++                INSERT INTO webhook_deliveries
++                    (id, organization_id, credential_id, idempotency_key, nonce,
++                     body_sha256, status, created_at)
++                SELECT ?, ?, ?, ?, ?, ?, ?, ?
++                WHERE NOT EXISTS (
++                    SELECT 1 FROM webhook_deliveries
++                    WHERE organization_id = ? AND idempotency_key = ?
++                )
++                """,
++                id, organizationId, credentialId, idempotencyKey, nonce,
++                bodySha256, WebhookDelivery.STATUS_PROCESSING, Timestamp.from(createdAt),
++                organizationId, idempotencyKey);
++        return inserted == 1;
++    }
++
++    /** Marks a reserved delivery as accepted and links the inbound message (same transaction). */
++    @Transactional(propagation = Propagation.MANDATORY)
++    public void markAccepted(UUID id, UUID inboundMessageId) {
++        jdbcTemplate.update(
++                "UPDATE webhook_deliveries SET status = ?, inbound_message_id = ? WHERE id = ?",
++                WebhookDelivery.STATUS_ACCEPTED, inboundMessageId, id);
++    }
++}
+diff --git a/src/main/java/com/kartgen/hireflow/webhook/WebhookIngestionService.java b/src/main/java/com/kartgen/hireflow/webhook/WebhookIngestionService.java
+new file mode 100644
+index 0000000..5aa49ba
+--- /dev/null
++++ b/src/main/java/com/kartgen/hireflow/webhook/WebhookIngestionService.java
+@@ -0,0 +1,150 @@
++package com.kartgen.hireflow.webhook;
++
++import com.kartgen.hireflow.mail.model.InboundAttachment;
++import com.kartgen.hireflow.mail.model.InboundAttachmentRepository;
++import com.kartgen.hireflow.mail.service.MessageIngestionService;
++import jakarta.persistence.EntityManager;
++import jakarta.persistence.PersistenceContext;
++import lombok.RequiredArgsConstructor;
++import lombok.extern.slf4j.Slf4j;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.time.Instant;
++import java.util.List;
++import java.util.UUID;
++
++/**
++ * Transactional orchestration of one authenticated webhook delivery.
++ *
++ * A single transaction covers: reservation of the durable idempotency
++ * ledger row (database unique constraints arbitrate concurrent races),
++ * creation of the inbound message, its attachments and their processing
++ * jobs, and the final ACCEPTED outcome. If any step fails, the whole
++ * delivery rolls back and the sender's retry re-enters cleanly.
++ *
++ * Semantics:
++ *  - first valid delivery          -> ACCEPTED
++ *  - same key + same body digest   -> DUPLICATE (original result returned)
++ *  - same key + different digest   -> PAYLOAD_CONFLICT (409)
++ *  - same nonce + different key    -> NONCE_REPLAY (409)
++ */
++@Slf4j
++@Service
++@RequiredArgsConstructor
++public class WebhookIngestionService {
++
++    private final WebhookDeliveryRepository deliveryRepo;
++    private final WebhookDeliveryStore deliveryStore;
++    private final MessageIngestionService ingestionService;
++    private final InboundAttachmentRepository attachmentRepo;
++
++    @PersistenceContext
++    private EntityManager entityManager;
++
++    public record DeliveryOutcome(
++            Type type,
++            UUID deliveryId,
++            UUID inboundMessageId,
++            List<UUID> attachmentIds) {
++
++        public enum Type { ACCEPTED, DUPLICATE, PAYLOAD_CONFLICT, NONCE_REPLAY }
++
++        static DeliveryOutcome accepted(UUID deliveryId, UUID messageId, List<UUID> attachmentIds) {
++            return new DeliveryOutcome(Type.ACCEPTED, deliveryId, messageId, attachmentIds);
++        }
++
++        static DeliveryOutcome duplicate(WebhookDelivery delivery, List<UUID> attachmentIds) {
++            return new DeliveryOutcome(Type.DUPLICATE, delivery.getId(),
++                    delivery.getInboundMessageId(), attachmentIds);
++        }
++
++        static DeliveryOutcome payloadConflict(WebhookDelivery delivery) {
++            return new DeliveryOutcome(Type.PAYLOAD_CONFLICT, delivery.getId(), null, List.of());
++        }
++
++        static DeliveryOutcome nonceReplay() {
++            return new DeliveryOutcome(Type.NONCE_REPLAY, null, null, List.of());
++        }
++    }
++
++    @Transactional
++    public DeliveryOutcome ingestVerifiedDelivery(UUID organizationId, UUID credentialId,
++                                                  String idempotencyKey, String nonce,
++                                                  String bodySha256, String forwarderEmail,
++                                                  String originalSenderEmail, String subject,
++                                                  String sourceType, UUID jobId,
++                                                  List<byte[]> attachmentData,
++                                                  List<String> attachmentNames) {
++        // 1) Durable replay check: same organization + credential + nonce.
++        var byNonce = deliveryRepo
++                .findByOrganizationIdAndCredentialIdAndNonce(organizationId, credentialId, nonce)
++                .orElse(null);
++        if (byNonce != null) {
++            if (byNonce.getIdempotencyKey().equals(idempotencyKey)) {
++                // Exact replay of the same logical delivery: return the original outcome.
++                log.info("Webhook delivery replayed (same idempotency key): delivery={} org={}",
++                        byNonce.getId(), organizationId);
++                return DeliveryOutcome.duplicate(byNonce, attachmentIds(byNonce.getInboundMessageId()));
++            }
++            log.warn("Webhook nonce reuse with different idempotency key rejected: org={} credential={}",
++                    organizationId, credentialId);
++            return DeliveryOutcome.nonceReplay();
++        }
++
++        // 2) Atomic idempotency reservation; the database unique constraint on
++        //    (organization_id, idempotency_key) arbitrates concurrent duplicates.
++        UUID deliveryId = UUID.randomUUID();
++        boolean reserved = deliveryStore.tryReserve(deliveryId, organizationId, credentialId,
++                idempotencyKey, nonce, bodySha256, Instant.now());
++        if (!reserved) {
++            WebhookDelivery existing = deliveryRepo
++                    .findByOrganizationIdAndIdempotencyKey(organizationId, idempotencyKey)
++                    .orElseThrow(() -> new IllegalStateException(
++                            "Idempotency conflict without existing delivery row"));
++            if (existing.getBodySha256().equals(bodySha256)) {
++                log.info("Webhook delivery duplicate (same payload): delivery={} org={}",
++                        existing.getId(), organizationId);
++                return DeliveryOutcome.duplicate(existing, attachmentIds(existing.getInboundMessageId()));
++            }
++            log.warn("Webhook idempotency key reused with different payload rejected: delivery={} org={}",
++                    existing.getId(), organizationId);
++            return DeliveryOutcome.payloadConflict(existing);
++        }
++
++        // 3) Ingest atomically in the same transaction: one message, N
++        //    attachments, N parse jobs. Rolls back everything on failure.
++        MessageIngestionService.WebhookIngestResult result = ingestionService.ingestFromWebhook(
++                organizationId, forwarderEmail, originalSenderEmail, subject, sourceType,
++                attachmentData, attachmentNames, jobId);
++
++        // Hibernate defers the JPA inserts until flush; the JDBC outcome update
++        // runs on the same connection and must see the persisted message row.
++        entityManager.flush();
++
++        // 4) Persist the delivery outcome (same transaction).
++        deliveryStore.markAccepted(deliveryId, result.messageId());
++        return DeliveryOutcome.accepted(deliveryId, result.messageId(), result.attachmentIds());
++    }
++
++    private List<UUID> attachmentIds(UUID messageId) {
++        if (messageId == null) {
++            return List.of();
++        }
++        return attachmentRepo.findByMessageId(messageId).stream()
++                .map(InboundAttachment::getId)
++                .toList();
++    }
++
++    /** Committed-row lookup used by the controller when a concurrent race loses. */
++    @Transactional(readOnly = true)
++    public WebhookDelivery findDelivery(UUID organizationId, String idempotencyKey) {
++        return deliveryRepo.findByOrganizationIdAndIdempotencyKey(organizationId, idempotencyKey)
++                .orElse(null);
++    }
++
++    @Transactional(readOnly = true)
++    public List<UUID> attachmentIdsOf(WebhookDelivery delivery) {
++        return attachmentIds(delivery.getInboundMessageId());
++    }
++}
+diff --git a/src/main/resources/application.yml b/src/main/resources/application.yml
+index 367470b..59ec1b6 100644
+--- a/src/main/resources/application.yml
++++ b/src/main/resources/application.yml
+@@ -63,7 +63,13 @@ hireflow:
+     request-timeout-ms: ${AI_REQUEST_TIMEOUT_MS:60000}
+   webhook:
+     enabled: ${WEBHOOK_ENABLED:true}
+-    secret: ${WEBHOOK_SECRET:hireflow-local-webhook-secret}
++    replay-window-seconds: ${WEBHOOK_REPLAY_WINDOW_SECONDS:300}
++    max-body-bytes: ${WEBHOOK_MAX_BODY_BYTES:26214400}
++    max-attachments: ${WEBHOOK_MAX_ATTACHMENTS:20}
++    max-attachment-bytes: ${WEBHOOK_MAX_ATTACHMENT_BYTES:52428800}
++    # Local-development only: used by the local profile seeder to provision the
++    # demo organization credential. Never used for request authentication.
++    local-dev-secret: ${WEBHOOK_LOCAL_DEV_SECRET:hireflow-local-webhook-secret}
+   cors:
+     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*,chrome-extension://*}
+   oauth:
+diff --git a/src/main/resources/db/migration/V4__webhook_security_and_idempotency.sql b/src/main/resources/db/migration/V4__webhook_security_and_idempotency.sql
+new file mode 100644
+index 0000000..5aaf814
+--- /dev/null
++++ b/src/main/resources/db/migration/V4__webhook_security_and_idempotency.sql
+@@ -0,0 +1,59 @@
++-- ============================================================
++-- HireFlow AI - V4 Webhook security and durable idempotency
++-- ============================================================
++-- Adds per-organization webhook credentials (secrets encrypted at
++-- rest with the application AES-256-GCM key) and durable delivery
++-- records used for replay protection (nonce) and idempotency
++-- (idempotency key + body digest).
++--
++-- Retention note: webhook_deliveries rows are the durable replay
++-- guard. They must be retained for AT LEAST the configured replay
++-- validity window (default 5 minutes); a realistic retention period
++-- is 7-30 days. No cleanup job is introduced by this migration -
++-- removing rows earlier than the replay window would re-open replay.
++
++-- -----------------------------------------------
++-- 28. Webhook Credentials (one or more per organization)
++-- -----------------------------------------------
++CREATE TABLE webhook_credentials (
++    id               UUID         NOT NULL,
++    organization_id  UUID         NOT NULL,
++    key_id           VARCHAR(64)  NOT NULL,
++    encrypted_secret VARCHAR(512) NOT NULL,
++    status           VARCHAR(24)  NOT NULL DEFAULT 'ACTIVE',
++    created_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    created_by       UUID,
++    revoked_at       TIMESTAMP,
++    revoked_by       UUID,
++    CONSTRAINT pk_webhook_credentials PRIMARY KEY (id),
++    CONSTRAINT fk_whcred_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
++    CONSTRAINT uq_webhook_credentials_key_id UNIQUE (key_id),
++    CONSTRAINT ck_webhook_credentials_status CHECK (status IN ('ACTIVE', 'REVOKED'))
++);
++
++CREATE INDEX idx_webhook_credentials_org ON webhook_credentials (organization_id, status);
++
++-- -----------------------------------------------
++-- 29. Webhook Deliveries (durable replay + idempotency ledger)
++-- -----------------------------------------------
++CREATE TABLE webhook_deliveries (
++    id                 UUID         NOT NULL,
++    organization_id    UUID         NOT NULL,
++    credential_id      UUID         NOT NULL,
++    idempotency_key    VARCHAR(200) NOT NULL,
++    nonce              VARCHAR(128) NOT NULL,
++    body_sha256        VARCHAR(64)  NOT NULL,
++    status             VARCHAR(24)  NOT NULL,
++    inbound_message_id UUID,
++    created_at         TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    CONSTRAINT pk_webhook_deliveries PRIMARY KEY (id),
++    CONSTRAINT fk_whdel_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
++    CONSTRAINT fk_whdel_cred FOREIGN KEY (credential_id) REFERENCES webhook_credentials(id),
++    CONSTRAINT fk_whdel_msg FOREIGN KEY (inbound_message_id) REFERENCES inbound_messages(id),
++    -- Idempotency identity: one logical delivery per organization + key.
++    CONSTRAINT uq_webhook_deliveries_org_idem UNIQUE (organization_id, idempotency_key),
++    -- Replay identity: one delivery per organization + credential + nonce.
++    CONSTRAINT uq_webhook_deliveries_org_cred_nonce UNIQUE (organization_id, credential_id, nonce)
++);
++
++CREATE INDEX idx_webhook_deliveries_org_created ON webhook_deliveries (organization_id, created_at);
+diff --git a/src/test/java/com/kartgen/hireflow/WebhookAuthIntegrationTest.java b/src/test/java/com/kartgen/hireflow/WebhookAuthIntegrationTest.java
+index 3b7dcf1..7b905ca 100644
+--- a/src/test/java/com/kartgen/hireflow/WebhookAuthIntegrationTest.java
++++ b/src/test/java/com/kartgen/hireflow/WebhookAuthIntegrationTest.java
+@@ -1,22 +1,39 @@
+ package com.kartgen.hireflow;
+ 
+-import com.kartgen.hireflow.support.IntegrationTestSupport;
++import com.fasterxml.jackson.databind.JsonNode;
++import com.kartgen.hireflow.mail.model.InboundMessage;
++import com.kartgen.hireflow.support.WebhookIntegrationTestSupport;
++import com.kartgen.hireflow.support.WebhookTestSupport;
++import com.kartgen.hireflow.tenant.Organization;
++import com.kartgen.hireflow.webhook.WebhookCredential;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.http.MediaType;
++import org.springframework.test.web.servlet.MvcResult;
++import org.springframework.test.web.servlet.ResultActions;
+ 
+-import java.util.Map;
++import java.nio.charset.StandardCharsets;
++import java.time.Instant;
++import java.util.UUID;
+ 
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+ 
+-class WebhookAuthIntegrationTest extends IntegrationTestSupport {
++/**
++ * J-2 webhook security: HMAC authentication, per-organization credentials,
++ * timestamp/nonce validation, durable replay protection and idempotency -
++ * exercised through the real filter chain and real endpoints.
++ */
++class WebhookAuthIntegrationTest extends WebhookIntegrationTestSupport {
+ 
+-    private static final String PATH = "/api/v1/mail-webhook/inbound";
++    // ── Authentication ──────────────────────────────────────────────────────
+ 
+     @Test
+-    void rejectsWebhookWithoutSecret() throws Exception {
+-        mockMvc.perform(post(PATH)
++    void missingSignatureIsRejected() throws Exception {
++        mockMvc.perform(post(WEBHOOK_PATH)
+                         .header("X-HireFlow-Org-Id", ORG_ID)
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content("{}"))
+@@ -25,46 +42,474 @@ class WebhookAuthIntegrationTest extends IntegrationTestSupport {
+     }
+ 
+     @Test
+-    void rejectsWebhookWithInvalidSecret() throws Exception {
+-        mockMvc.perform(post(PATH)
+-                        .header("X-HireFlow-Webhook-Secret", "wrong-secret")
++    void legacyGlobalSecretIsRetired() throws Exception {
++        // The old shared-secret model must not authenticate anything.
++        mockMvc.perform(post(WEBHOOK_PATH)
++                        .header("X-HireFlow-Webhook-Secret", "hireflow-local-webhook-secret")
+                         .header("X-HireFlow-Org-Id", ORG_ID)
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content("{}"))
+                 .andExpect(status().isUnauthorized())
+-                .andExpect(jsonPath("$.message").value("Invalid webhook authentication"));
++                .andExpect(jsonPath("$.message").value("Missing webhook authentication"));
+     }
+ 
+     @Test
+-    void requiresOrganizationHeaderAfterSecretCheck() throws Exception {
+-        mockMvc.perform(post(PATH)
+-                        .header("X-HireFlow-Webhook-Secret", WEBHOOK_SECRET)
++    void incorrectSignatureIsRejected() throws Exception {
++        var hook = hook();
++        byte[] body = jsonDelivery("hr@agency.example", null, "bad signature", "r.pdf", smallPdf());
++        String digest = WebhookTestSupport.sha256Hex(body);
++        String forgedSignature = "0".repeat(64);
++        long ts = Instant.now().getEpochSecond();
++        String nonce = WebhookTestSupport.randomNonce();
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-badsig");
++
++        long before = messageRepo.countByOrganizationId(hook.orgId());
++        mockMvc.perform(post(WEBHOOK_PATH)
+                         .contentType(MediaType.APPLICATION_JSON)
+-                        .content("{}"))
+-                .andExpect(status().isBadRequest())
+-                .andExpect(jsonPath("$.message").value("Missing X-HireFlow-Org-Id header"));
++                        .content(body)
++                        .header("X-HireFlow-Org-Id", hook.orgId())
++                        .header("X-HireFlow-Key-Id", hook.credential().keyId())
++                        .header("X-HireFlow-Timestamp", String.valueOf(ts))
++                        .header("X-HireFlow-Nonce", nonce)
++                        .header("X-HireFlow-Signature", forgedSignature)
++                        .header("Idempotency-Key", idem))
++                .andExpect(status().isUnauthorized())
++                .andExpect(jsonPath("$.message").value("Invalid webhook authentication"));
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isEqualTo(before);
++        assertThat(deliveryRepo.findByOrganizationIdAndIdempotencyKey(hook.orgId(), idem)).isEmpty();
++    }
++
++    @Test
++    void modifiedBodyWithOriginalSignatureIsRejected() throws Exception {
++        var hook = hook();
++        byte[] original = jsonDelivery("hr@agency.example", null, "original body", "r.pdf", smallPdf());
++        byte[] tampered = jsonDelivery("hr@agency.example", null, "TAMPERED body", "r.pdf", smallPdf());
++        long ts = Instant.now().getEpochSecond();
++        String nonce = WebhookTestSupport.randomNonce();
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-tamper");
++        // Signature computed over the original bytes only.
++        var builder = signedJson(hook.credential().secret(), hook.orgId().toString(),
++                hook.credential().keyId(), ts, nonce, idem, original)
++                .content(tampered); // body swapped after signing
++
++        long before = messageRepo.countByOrganizationId(hook.orgId());
++        mockMvc.perform(builder)
++                .andExpect(status().isUnauthorized())
++                .andExpect(jsonPath("$.message").value("Invalid webhook authentication"));
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isEqualTo(before);
++    }
++
++    @Test
++    void wrongOrganizationKeyCombinationIsRejected() throws Exception {
++        var orgA = hook("orga");
++        var orgB = hook("orgb"); // independent organization with its own credential
++        byte[] body = jsonDelivery("hr@agency.example", null, "cross tenant", "r.pdf", smallPdf());
++
++        long beforeA = messageRepo.countByOrganizationId(orgA.organization().getId());
++        long beforeB = messageRepo.countByOrganizationId(orgB.organization().getId());
++
++        mockMvc.perform(signedJson(orgA.credential().secret(), orgB.orgId().toString(),
++                        orgA.credential().keyId(), Instant.now().getEpochSecond(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-cross"), body))
++                .andExpect(status().isUnauthorized())
++                .andExpect(jsonPath("$.message").value("Invalid webhook authentication"));
++
++        assertThat(messageRepo.countByOrganizationId(orgA.organization().getId())).isEqualTo(beforeA);
++        assertThat(messageRepo.countByOrganizationId(orgB.organization().getId())).isEqualTo(beforeB);
++        assertThat(deliveryRepo.countByOrganizationId(orgB.organization().getId())).isZero();
++    }
++
++    @Test
++    void revokedCredentialIsRejected() throws Exception {
++        var hook = hook("revoke");
++        byte[] body = jsonDelivery("hr@agency.example", null, "revoked", "r.pdf", smallPdf());
++
++        mockMvc.perform(post("/api/v1/webhook-credentials/" + hook.credential().keyId() + "/revoke")
++                        .header("Authorization", "Bearer " + hook.org().jwt()))
++                .andExpect(status().isOk())
++                .andExpect(jsonPath("$.status").value("REVOKED"));
++
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-revoked"), body))
++                .andExpect(status().isUnauthorized())
++                .andExpect(jsonPath("$.message").value("Invalid webhook authentication"));
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isZero();
+     }
+ 
+     @Test
+-    void rejectsInvalidOrganizationId() throws Exception {
+-        mockMvc.perform(post(PATH)
+-                        .header("X-HireFlow-Webhook-Secret", WEBHOOK_SECRET)
+-                        .header("X-HireFlow-Org-Id", "not-a-uuid")
++    void suspendedOrganizationIsRejected() throws Exception {
++        var hook = hook("suspend");
++        hook.organization().setStatus("SUSPENDED");
++        orgRepo.save(hook.organization());
++        byte[] body = jsonDelivery("hr@agency.example", null, "suspended", "r.pdf", smallPdf());
++
++        // Valid signature, but the organization is not ACTIVE -> 403, nothing ingested.
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-suspend"), body))
++                .andExpect(status().isForbidden());
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isZero();
++    }
++
++    @Test
++    void expiredTimestampIsRejected() throws Exception {
++        var hook = hook("expired");
++        byte[] body = jsonDelivery("hr@agency.example", null, "expired", "r.pdf", smallPdf());
++        long stale = Instant.now().getEpochSecond() - 301;
++
++        mockMvc.perform(signedJson(hook.credential().secret(), hook.orgId().toString(),
++                        hook.credential().keyId(), stale, WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-expired"), body))
++                .andExpect(status().isUnauthorized())
++                .andExpect(jsonPath("$.message").value("Webhook timestamp outside allowed window"));
++    }
++
++    @Test
++    void futureTimestampBeyondClockSkewIsRejected() throws Exception {
++        var hook = hook("future");
++        byte[] body = jsonDelivery("hr@agency.example", null, "future", "r.pdf", smallPdf());
++        long future = Instant.now().getEpochSecond() + 301;
++
++        mockMvc.perform(signedJson(hook.credential().secret(), hook.orgId().toString(),
++                        hook.credential().keyId(), future, WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-future"), body))
++                .andExpect(status().isUnauthorized())
++                .andExpect(jsonPath("$.message").value("Webhook timestamp outside allowed window"));
++    }
++
++    @Test
++    void malformedTimestampIsRejected() throws Exception {
++        var hook = hook("badts");
++        byte[] body = jsonDelivery("hr@agency.example", null, "bad ts", "r.pdf", smallPdf());
++
++        mockMvc.perform(signedJson(hook.credential().secret(), hook.orgId().toString(),
++                        hook.credential().keyId(), 0L, WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-badts"), body)
++                        .header("X-HireFlow-Timestamp", "not-a-number"))
++                .andExpect(status().isUnauthorized());
++    }
++
++    @Test
++    void malformedNonceIsRejected() throws Exception {
++        var hook = hook("badnonce");
++        byte[] body = jsonDelivery("hr@agency.example", null, "bad nonce", "r.pdf", smallPdf());
++
++        mockMvc.perform(signedJson(hook.credential().secret(), hook.orgId().toString(),
++                        hook.credential().keyId(), Instant.now().getEpochSecond(), "short",
++                        WebhookTestSupport.randomIdempotencyKey("j2-badnonce"), body)
++                        .header("X-HireFlow-Nonce", "short"))
++                .andExpect(status().isUnauthorized());
++    }
++
++    @Test
++    void missingIdempotencyKeyIsRejected() throws Exception {
++        var hook = hook("noidem");
++        byte[] body = jsonDelivery("hr@agency.example", null, "no idem", "r.pdf", smallPdf());
++        long ts = Instant.now().getEpochSecond();
++        String nonce = WebhookTestSupport.randomNonce();
++        String digest = WebhookTestSupport.sha256Hex(body);
++        String signature = WebhookTestSupport.hmacSha256Hex(hook.credential().secret(),
++                WebhookTestSupport.canonicalString(hook.orgId().toString(),
++                        hook.credential().keyId(), String.valueOf(ts), nonce, "POST", WEBHOOK_PATH,
++                        "", digest));
++
++        mockMvc.perform(post(WEBHOOK_PATH)
+                         .contentType(MediaType.APPLICATION_JSON)
+-                        .content("{}"))
++                        .content(body)
++                        .header("X-HireFlow-Org-Id", hook.orgId())
++                        .header("X-HireFlow-Key-Id", hook.credential().keyId())
++                        .header("X-HireFlow-Timestamp", String.valueOf(ts))
++                        .header("X-HireFlow-Nonce", nonce)
++                        .header("X-HireFlow-Signature", signature))
+                 .andExpect(status().isBadRequest());
++
++        assertThat(deliveryRepo.countByOrganizationId(hook.orgId())).isZero();
+     }
+ 
++    // ── Valid deliveries ────────────────────────────────────────────────────
++
+     @Test
+-    void authenticatedWebhookReachesController() throws Exception {
+-        mockMvc.perform(post(PATH)
+-                        .header("X-HireFlow-Webhook-Secret", WEBHOOK_SECRET)
+-                        .header("X-HireFlow-Org-Id", ORG_ID)
++    void validSignedJsonDeliverySucceeds() throws Exception {
++        var hook = hook("json-ok");
++        byte[] body = jsonDelivery("hr@agency.example", null, "json delivery", "resume.pdf", smallPdf());
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-json");
++
++        long beforeMessages = messageRepo.countByOrganizationId(hook.orgId());
++        MvcResult result = mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(), idem, body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("QUEUED"))
++                .andExpect(jsonPath("$.deliveryId").isNotEmpty())
++                .andExpect(jsonPath("$.acceptedCount").value(1))
++                .andReturn();
++
++        JsonNode response = objectMapper.readTree(result.getResponse().getContentAsString());
++        UUID messageId = UUID.fromString(response.path("inboundMessageId").asText());
++        var delivery = deliveryRepo.findByOrganizationIdAndIdempotencyKey(hook.orgId(), idem).orElseThrow();
++        assertThat(delivery.getStatus()).isEqualTo("ACCEPTED");
++        assertThat(delivery.getInboundMessageId()).isEqualTo(messageId);
++        assertThat(delivery.getBodySha256()).isEqualTo(WebhookTestSupport.sha256Hex(body));
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isEqualTo(beforeMessages + 1);
++        assertThat(attachmentRepo.findByMessageId(messageId)).hasSize(1);
++    }
++
++    @Test
++    void validSignedMultipartDeliverySucceeds() throws Exception {
++        var hook = hook("mp-ok");
++        var parts = multipartDelivery("hr@agency.example", "multipart delivery", "resume.pdf", smallPdf());
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-mp");
++
++        long beforeMessages = messageRepo.countByOrganizationId(hook.orgId());
++        MvcResult result = mockMvc.perform(performSignedMultipart(hook.credential(),
++                        hook.orgId().toString(), WebhookTestSupport.randomNonce(), idem, parts))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("QUEUED"))
++                .andExpect(jsonPath("$.acceptedCount").value(1))
++                .andReturn();
++
++        JsonNode response = objectMapper.readTree(result.getResponse().getContentAsString());
++        UUID messageId = UUID.fromString(response.path("inboundMessageId").asText());
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isEqualTo(beforeMessages + 1);
++        assertThat(attachmentRepo.findByMessageId(messageId)).hasSize(1);
++        var delivery = deliveryRepo.findByOrganizationIdAndIdempotencyKey(hook.orgId(), idem).orElseThrow();
++        assertThat(delivery.getStatus()).isEqualTo("ACCEPTED");
++    }
++
++    // ── Replay and idempotency ──────────────────────────────────────────────
++
++    @Test
++    void replayingSameNonceCreatesNoDuplicateProcessing() throws Exception {
++        var hook = hook("replay-nonce");
++        byte[] body = jsonDelivery("hr@agency.example", null, "exact replay", "resume.pdf", smallPdf());
++        String nonce = WebhookTestSupport.randomNonce();
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-exact");
++
++        MvcResult first = mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        nonce, idem, body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("QUEUED"))
++                .andReturn();
++        String deliveryId = readJson(first, "deliveryId");
++        UUID messageId = UUID.fromString(readJson(first, "inboundMessageId"));
++
++        // Exact same request bytes, timestamp, nonce and idempotency key.
++        MvcResult second = mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        nonce, idem, body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("DUPLICATE"))
++                .andExpect(jsonPath("$.deliveryId").value(deliveryId))
++                .andExpect(jsonPath("$.inboundMessageId").value(messageId.toString()))
++                .andReturn();
++
++        assertThat(readJson(second, "attachmentIds")).isEqualTo(readJson(first, "attachmentIds"));
++        assertThat(deliveryRepo.countByOrganizationId(hook.orgId())).isEqualTo(1);
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isEqualTo(1);
++        assertThat(attachmentRepo.findByMessageId(messageId)).hasSize(1);
++    }
++
++    @Test
++    void sameIdempotencyKeySamePayloadReturnsOriginalResult() throws Exception {
++        var hook = hook("idem-same");
++        byte[] body = jsonDelivery("hr@agency.example", null, "idempotent retry", "resume.pdf", smallPdf());
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-idem");
++
++        MvcResult first = mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(), idem, body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("QUEUED"))
++                .andReturn();
++        String deliveryId = readJson(first, "deliveryId");
++
++        // Fresh nonce + fresh timestamp, identical payload and idempotency key.
++        MvcResult retry = mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(), idem, body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("DUPLICATE"))
++                .andExpect(jsonPath("$.deliveryId").value(deliveryId))
++                .andReturn();
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isEqualTo(1);
++        assertThat(deliveryRepo.countByOrganizationId(hook.orgId())).isEqualTo(1);
++        assertThat(readJson(retry, "attachmentIds")).isEqualTo(readJson(first, "attachmentIds"));
++    }
++
++    @Test
++    void sameIdempotencyKeyDifferentPayloadConflict() throws Exception {
++        var hook = hook("idem-conflict");
++        byte[] firstBody = jsonDelivery("hr@agency.example", null, "payload one", "resume.pdf", smallPdf());
++        byte[] secondBody = jsonDelivery("hr@agency.example", null, "payload TWO", "resume.pdf", smallPdf());
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-conflict");
++
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(), idem, firstBody))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("QUEUED"));
++
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(), idem, secondBody))
++                .andExpect(status().isConflict())
++                .andExpect(jsonPath("$.error").value("Idempotency key already used with a different payload"));
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isEqualTo(1);
++        assertThat(deliveryRepo.countByOrganizationId(hook.orgId())).isEqualTo(1);
++    }
++
++    @Test
++    void sameNonceDifferentIdempotencyKeyIsRejected() throws Exception {
++        var hook = hook("nonce-mismatch");
++        byte[] firstBody = jsonDelivery("hr@agency.example", null, "nonce owner", "resume.pdf", smallPdf());
++        byte[] secondBody = jsonDelivery("hr@agency.example", null, "nonce thief", "resume.pdf", smallPdf());
++        String nonce = WebhookTestSupport.randomNonce();
++        String firstIdem = WebhookTestSupport.randomIdempotencyKey("j2-nonce-a");
++
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        nonce, firstIdem, firstBody))
++                .andExpect(status().isAccepted());
++
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        nonce, WebhookTestSupport.randomIdempotencyKey("j2-nonce-b"), secondBody))
++                .andExpect(status().isConflict())
++                .andExpect(jsonPath("$.error").value("Webhook replay detected"));
++
++        assertThat(deliveryRepo.countByOrganizationId(hook.orgId())).isEqualTo(1);
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isEqualTo(1);
++    }
++
++    // ── Credential lifecycle ────────────────────────────────────────────────
++
++    @Test
++    void viewerAndRecruiterCannotProvisionCredentials() throws Exception {
++        var hook = hook("rbac");
++        String viewerJwt = membershipJwt(hook.org(), "VIEWER", "viewer");
++        String recruiterJwt = membershipJwt(hook.org(), "RECRUITER", "recruiter");
++
++        mockMvc.perform(post("/api/v1/webhook-credentials").header("Authorization", "Bearer " + viewerJwt))
++                .andExpect(status().isForbidden());
++        mockMvc.perform(post("/api/v1/webhook-credentials").header("Authorization", "Bearer " + recruiterJwt))
++                .andExpect(status().isForbidden());
++        mockMvc.perform(post("/api/v1/webhook-credentials/"
++                        + hook.credential().keyId() + "/rotate").header("Authorization", "Bearer " + viewerJwt))
++                .andExpect(status().isForbidden());
++        assertThat(credentialRepo.findByOrganizationIdOrderByCreatedAtDesc(hook.orgId())).hasSize(1);
++    }
++
++    @Test
++    void adminCanProvisionAndListNeverReturnsSecrets() throws Exception {
++        var hook = hook("admin");
++        String adminJwt = membershipJwt(hook.org(), "ADMIN", "admin");
++
++        MvcResult created = mockMvc.perform(post("/api/v1/webhook-credentials")
++                        .header("Authorization", "Bearer " + adminJwt))
++                .andExpect(status().isOk())
++                .andExpect(jsonPath("$.keyId").isNotEmpty())
++                .andExpect(jsonPath("$.secret").isNotEmpty())
++                .andReturn();
++        String secret = objectMapper.readTree(created.getResponse().getContentAsString())
++                .path("secret").asText();
++
++        MvcResult list = mockMvc.perform(get("/api/v1/webhook-credentials")
++                        .header("Authorization", "Bearer " + adminJwt))
++                .andExpect(status().isOk())
++                .andReturn();
++        String listBody = list.getResponse().getContentAsString();
++        assertThat(listBody).doesNotContain(secret);
++        assertThat(listBody).contains("whk_");
++
++        // The stored value must never be the raw secret.
++        WebhookCredential stored = credentialRepo.findByOrganizationIdOrderByCreatedAtDesc(hook.orgId())
++                .get(0);
++        assertThat(stored.getEncryptedSecret()).isNotEqualTo(secret);
++        assertThat(stored.getEncryptedSecret()).doesNotContain(secret);
++    }
++
++    @Test
++    void rotateRevokesOldCredentialAndIssuesNewSecret() throws Exception {
++        var hook = hook("rotate");
++        byte[] body = jsonDelivery("hr@agency.example", null, "rotation", "resume.pdf", smallPdf());
++        String oldKey = hook.credential().keyId();
++
++        MvcResult rotated = mockMvc.perform(post("/api/v1/webhook-credentials/" + oldKey + "/rotate")
++                        .header("Authorization", "Bearer " + hook.org().jwt()))
++                .andExpect(status().isOk())
++                .andExpect(jsonPath("$.keyId").isNotEmpty())
++                .andExpect(jsonPath("$.secret").isNotEmpty())
++                .andReturn();
++        JsonNode newCred = objectMapper.readTree(rotated.getResponse().getContentAsString());
++
++        WebhookCredential oldRow = credentialRepo.findByKeyId(oldKey).orElseThrow();
++        assertThat(oldRow.getStatus()).isEqualTo("REVOKED");
++        assertThat(oldRow.getRevokedAt()).isNotNull();
++
++        // Old key: rejected. New key: accepted.
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-rot-old"), body))
++                .andExpect(status().isUnauthorized());
++
++        mockMvc.perform(performSignedJson(
++                        new Credential(newCred.path("keyId").asText(), newCred.path("secret").asText()),
++                        hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-rot-new"), body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("QUEUED"));
++    }
++
++    @Test
++    void corruptStoredSecretFailsClosed() throws Exception {
++        var hook = hook("corrupt");
++        WebhookCredential credential = credentialRepo.findByKeyId(hook.credential().keyId()).orElseThrow();
++        credential.setEncryptedSecret("bm90LXJlYWxseS1lbmNyeXB0ZWQ=");
++        credentialRepo.save(credential);
++
++        byte[] body = jsonDelivery("hr@agency.example", null, "corrupt key", "resume.pdf", smallPdf());
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-corrupt"), body))
++                .andExpect(status().isServiceUnavailable());
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isZero();
++    }
++
++    @Test
++    void webhookHeadersGrantNoInteractiveAccess() throws Exception {
++        var hook = hook("noescalate");
++        // Webhook credentials are scoped to /api/v1/mail-webhook/*; the same
++        // headers presented to an interactive endpoint must authenticate nothing.
++        mockMvc.perform(post("/api/v1/jobs")
++                        .header("X-HireFlow-Org-Id", hook.orgId())
++                        .header("X-HireFlow-Key-Id", hook.credential().keyId())
+                         .contentType(MediaType.APPLICATION_JSON)
+-                        .content(objectMapper.writeValueAsString(Map.of(
+-                                "senderEmail", "hr@agency.example",
+-                                "subject", "No attachments"))))
+-                .andExpect(status().isBadRequest())
+-                .andExpect(jsonPath("$.error").value("No valid attachments"));
++                        .content("{\"title\":\"Escalation attempt\"}"))
++                .andExpect(status().isUnauthorized());
++    }
++
++    // ── Helpers ─────────────────────────────────────────────────────────────
++
++    private record Hook(WebhookOrg org, Credential credential) {
++        UUID orgId() { return org.org().getId(); }
++        Organization organization() { return org.org(); }
++    }
++
++    private Hook hook() throws Exception {
++        return hook("base");
++    }
++
++    private Hook hook(String prefix) throws Exception {
++        WebhookOrg org = newWebhookOrg(prefix);
++        Credential credential = provisionCredential(org);
++        return new Hook(org, credential);
++    }
++
++    private String readJson(MvcResult result, String field) throws Exception {
++        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
++        JsonNode value = body.path(field);
++        return value.isArray() ? value.toString() : value.asText();
+     }
+ }
+diff --git a/src/test/java/com/kartgen/hireflow/WebhookDeliveryIntegrityIntegrationTest.java b/src/test/java/com/kartgen/hireflow/WebhookDeliveryIntegrityIntegrationTest.java
+new file mode 100644
+index 0000000..f4de8b1
+--- /dev/null
++++ b/src/test/java/com/kartgen/hireflow/WebhookDeliveryIntegrityIntegrationTest.java
+@@ -0,0 +1,219 @@
++package com.kartgen.hireflow;
++
++import com.fasterxml.jackson.databind.JsonNode;
++import com.kartgen.hireflow.mail.model.InboundAttachment;
++import com.kartgen.hireflow.mail.model.InboundMessage;
++import com.kartgen.hireflow.ops.ProcessingJob;
++import com.kartgen.hireflow.support.TestResumePdf;
++import com.kartgen.hireflow.support.WebhookIntegrationTestSupport;
++import com.kartgen.hireflow.support.WebhookTestSupport;
++import org.junit.jupiter.api.Test;
++import org.springframework.test.web.servlet.MvcResult;
++
++import java.time.Duration;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Set;
++import java.util.UUID;
++import java.util.concurrent.Callable;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.Future;
++import java.util.concurrent.TimeUnit;
++import java.util.stream.Collectors;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
++
++/**
++ * J-2 webhook data integrity: one email -> one message -> many attachments
++ * -> processing jobs; concurrent-delivery safety; sender provenance.
++ */
++class WebhookDeliveryIntegrityIntegrationTest extends WebhookIntegrationTestSupport {
++
++    @Test
++    void threeAttachmentsCreateOneMessageWithThreeAttachmentsAndThreeJobs() throws Exception {
++        var hook = hook("three");
++        byte[] pdf1 = smallPdf();
++        byte[] pdf2 = smallPdf();
++        byte[] pdf3 = smallPdf();
++        List<WebhookTestSupport.FormPart> parts = List.of(
++                new WebhookTestSupport.FormPart("senderEmail", null, null, "hr@agency.example".getBytes()),
++                new WebhookTestSupport.FormPart("subject", null, null, "three resumes".getBytes()),
++                new WebhookTestSupport.FormPart("files", "one.pdf", "application/pdf", pdf1),
++                new WebhookTestSupport.FormPart("files", "two.pdf", "application/pdf", pdf2),
++                new WebhookTestSupport.FormPart("files", "three.pdf", "application/pdf", pdf3));
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-three");
++
++        MvcResult result = mockMvc.perform(performSignedMultipart(hook.credential(),
++                        hook.orgId().toString(), WebhookTestSupport.randomNonce(), idem, parts))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.acceptedCount").value(3))
++                .andReturn();
++
++        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
++        UUID messageId = UUID.fromString(body.path("inboundMessageId").asText());
++        List<UUID> attachmentIds = new ArrayList<>();
++        body.path("attachmentIds").forEach(n -> attachmentIds.add(UUID.fromString(n.asText())));
++
++        // ONE inbound message for the whole email.
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isEqualTo(1);
++        InboundMessage message = messageRepo.findById(messageId).orElseThrow();
++        assertThat(message.getOrganizationId()).isEqualTo(hook.orgId());
++
++        // Exactly three attachment records attached to that one message.
++        List<InboundAttachment> attachments = attachmentRepo.findByMessageId(messageId);
++        assertThat(attachments).hasSize(3);
++        assertThat(attachments.stream().map(InboundAttachment::getId).collect(Collectors.toSet()))
++                .isEqualTo(Set.copyOf(attachmentIds));
++
++        // Only the intended parse jobs: one per attachment, nothing else for them.
++        List<ProcessingJob> jobsForAttachments = jobRepo.findAll().stream()
++                .filter(j -> attachmentIds.contains(j.getReferenceId()))
++                .toList();
++        assertThat(jobsForAttachments).hasSize(3);
++        assertThat(jobsForAttachments).allMatch(j -> "PARSE_RESUME".equals(j.getJobType()));
++        assertThat(jobsForAttachments).allMatch(j -> j.getOrganizationId().equals(hook.orgId()));
++    }
++
++    @Test
++    void concurrentIdenticalDeliveriesCreateExactlyOneChain() throws Exception {
++        var hook = hook("race");
++        byte[] body = jsonDelivery("hr@agency.example", null, "race", "resume.pdf", smallPdf());
++        String nonce = WebhookTestSupport.randomNonce();
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-race");
++        long timestamp = java.time.Instant.now().getEpochSecond();
++        UUID orgId = hook.orgId();
++
++        ExecutorService pool = Executors.newFixedThreadPool(2);
++        CountDownLatch start = new CountDownLatch(1);
++        Callable<MvcResult> task = () -> {
++            start.await();
++            // Fresh builder per thread - identical signed request bytes/headers.
++            return mockMvc.perform(signedJson(hook.credential().secret(), orgId.toString(),
++                    hook.credential().keyId(), timestamp, nonce, idem, body)).andReturn();
++        };
++        Future<MvcResult> first = pool.submit(task);
++        Future<MvcResult> second = pool.submit(task);
++        start.countDown();
++        MvcResult r1 = first.get(30, TimeUnit.SECONDS);
++        MvcResult r2 = second.get(30, TimeUnit.SECONDS);
++        pool.shutdownNow();
++
++        int s1 = r1.getResponse().getStatus();
++        int s2 = r2.getResponse().getStatus();
++        assertThat(s1).isEqualTo(202);
++        assertThat(s2).isEqualTo(202);
++        // Exactly one thread reserved the delivery; the loser resolves against
++        // the committed winner. Which thread wins is nondeterministic.
++        String b1 = r1.getResponse().getContentAsString();
++        String b2 = r2.getResponse().getContentAsString();
++        assertThat(b1 + "\n" + b2).contains("QUEUED");
++        assertThat(b1 + "\n" + b2).contains("DUPLICATE");
++        JsonNode j1 = objectMapper.readTree(b1);
++        JsonNode j2 = objectMapper.readTree(b2);
++        assertThat(j1.path("deliveryId").asText())
++                .isEqualTo(j2.path("deliveryId").asText());
++        assertThat(j1.path("inboundMessageId").asText())
++                .isEqualTo(j2.path("inboundMessageId").asText());
++
++        // Exactly one durable delivery, one message, one attachment, one job.
++        assertThat(deliveryRepo.findByOrganizationIdAndIdempotencyKey(orgId, idem)).isPresent();
++        assertThat(deliveryRepo.countByOrganizationId(orgId)).isEqualTo(1);
++        assertThat(messageRepo.countByOrganizationId(orgId)).isEqualTo(1);
++        InboundMessage message = messageRepo.findAll().stream()
++                .filter(m -> m.getOrganizationId().equals(orgId))
++                .findFirst().orElseThrow();
++        assertThat(attachmentRepo.findByMessageId(message.getId())).hasSize(1);
++        UUID attachmentId = attachmentRepo.findByMessageId(message.getId()).get(0).getId();
++        assertThat(jobRepo.findAll().stream()
++                .filter(j -> attachmentId.equals(j.getReferenceId()))
++                .count()).isEqualTo(1);
++    }
++
++    @Test
++    void redeliveryDoesNotCreateAnotherResumeVersion() throws Exception {
++        var hook = hook("redeliver");
++        // Deterministic searchable email so the candidate can be located reliably.
++        String email = "redeliver." + UUID.randomUUID().toString().substring(0, 8) + "@example.test";
++        byte[] pdf = TestResumePdf.create(TestResumePdf.resume(
++                "J2 Redeliver", email, "Pune", 3, "Jan 2026"));
++        byte[] body = jsonDelivery("hr@agency.example", null, "living profile", "resume.pdf", pdf);
++        String nonce = WebhookTestSupport.randomNonce();
++        String idem = WebhookTestSupport.randomIdempotencyKey("j2-redeliver");
++
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(), nonce, idem, body))
++                .andExpect(status().isAccepted());
++
++        // Wait for the worker to promote the resume into a candidate.
++        com.fasterxml.jackson.databind.JsonNode page = awaitJson(
++                "/api/v1/candidates?search=" + email, hook.org().jwt(),
++                p -> p.path("totalElements").asInt() >= 1,
++                Duration.ofSeconds(30));
++        UUID candidateId = UUID.fromString(page.path("content").get(0).path("id").asText());
++        int versionsBefore = getJson("/api/v1/candidates/" + candidateId + "/versions",
++                hook.org().jwt()).size();
++
++        // Idempotent re-delivery: original result, no new resume version.
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(), idem, body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("DUPLICATE"));
++
++        Thread.sleep(1500);
++        int versionsAfter = getJson("/api/v1/candidates/" + candidateId + "/versions",
++                hook.org().jwt()).size();
++        assertThat(versionsAfter).isEqualTo(versionsBefore);
++    }
++
++    @Test
++    void forwarderAndClaimedOriginalSenderAreStoredSeparately() throws Exception {
++        var hook = hook("provenance");
++        byte[] body = jsonDelivery("forwarder-mailbox@agency.example", "claimed-original@candidate.example",
++                "fwd: candidate", "resume.pdf", smallPdf());
++
++        MvcResult result = mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-prov"), body))
++                .andExpect(status().isAccepted())
++                .andReturn();
++
++        UUID messageId = UUID.fromString(objectMapper.readTree(result.getResponse().getContentAsString())
++                .path("inboundMessageId").asText());
++        InboundMessage message = messageRepo.findById(messageId).orElseThrow();
++        assertThat(message.getSenderEmail()).isEqualTo("forwarder-mailbox@agency.example");
++        assertThat(message.getOriginalSenderClaim()).isEqualTo("claimed-original@candidate.example");
++        assertThat(message.getSenderEmail()).isNotEqualTo(message.getOriginalSenderClaim());
++    }
++
++    @Test
++    void missingOriginalSenderRemainsUnknown() throws Exception {
++        var hook = hook("prov-unknown");
++        byte[] body = jsonDelivery("forwarder-mailbox@agency.example", null,
++                "no original claimed", "resume.pdf", smallPdf());
++
++        MvcResult result = mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-prov-unk"), body))
++                .andExpect(status().isAccepted())
++                .andReturn();
++
++        UUID messageId = UUID.fromString(objectMapper.readTree(result.getResponse().getContentAsString())
++                .path("inboundMessageId").asText());
++        InboundMessage message = messageRepo.findById(messageId).orElseThrow();
++        assertThat(message.getSenderEmail()).isEqualTo("forwarder-mailbox@agency.example");
++        assertThat(message.getOriginalSenderClaim()).isNull();
++    }
++
++    private record Hook(WebhookOrg org, Credential credential) {
++        UUID orgId() { return org.org().getId(); }
++    }
++
++    private Hook hook(String prefix) throws Exception {
++        WebhookOrg org = newWebhookOrg(prefix);
++        Credential credential = provisionCredential(org);
++        return new Hook(org, credential);
++    }
++}
+diff --git a/src/test/java/com/kartgen/hireflow/WebhookReplayDurabilityIntegrationTest.java b/src/test/java/com/kartgen/hireflow/WebhookReplayDurabilityIntegrationTest.java
+new file mode 100644
+index 0000000..fd7c62b
+--- /dev/null
++++ b/src/test/java/com/kartgen/hireflow/WebhookReplayDurabilityIntegrationTest.java
+@@ -0,0 +1,97 @@
++package com.kartgen.hireflow;
++
++import com.kartgen.hireflow.support.WebhookIntegrationTestSupport;
++import com.kartgen.hireflow.support.WebhookTestSupport;
++import org.junit.jupiter.api.MethodOrderer;
++import org.junit.jupiter.api.Order;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.TestMethodOrder;
++import org.springframework.boot.test.context.SpringBootTest;
++import org.springframework.test.annotation.DirtiesContext;
++import org.springframework.test.context.TestPropertySource;
++import org.springframework.test.web.servlet.MvcResult;
++
++import java.util.List;
++import java.util.UUID;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
++
++/**
++ * J-2 scenario 19: durable replay protection must survive an application
++ * restart (reconstructed Spring context) using the same persistent database.
++ *
++ * This class uses its own isolated persistent H2 database and forces a
++ * context rebuild between the two tests. The second request replays the
++ * exact same nonce + idempotency key against the brand-new context; the
++ * database uniqueness constraints - not any in-memory state - must reject
++ * the duplicate.
++ */
++@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
++@SpringBootTest(properties = {
++        "spring.datasource.url=jdbc:h2:mem:hireflow-webhook-durability;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH"
++})
++class WebhookReplayDurabilityIntegrationTest extends WebhookIntegrationTestSupport {
++
++    private static final String FIXED_NONCE = "durability-nonce-0000000001";
++    private static final String FIXED_IDEM = "durability-key-00000001";
++
++    private static UUID organizationId;
++    private static String keyId;
++    private static String secret;
++    private static byte[] body;
++
++    @Test
++    @Order(1)
++    @DirtiesContext(methodMode = DirtiesContext.MethodMode.AFTER_METHOD)
++    void firstDeliveryAcceptedBeforeRestart() throws Exception {
++        WebhookOrg org = newWebhookOrg("durability");
++        Credential credential = provisionCredential(org);
++        organizationId = org.org().getId();
++        keyId = credential.keyId();
++        secret = credential.secret();
++        body = jsonDelivery("hr@agency.example", null, "durability", "resume.pdf", smallPdf());
++
++        mockMvc.perform(signedJson(secret, organizationId.toString(), keyId,
++                        java.time.Instant.now().getEpochSecond(), FIXED_NONCE, FIXED_IDEM, body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("QUEUED"));
++
++        assertThat(deliveryRepo.countByOrganizationId(organizationId)).isEqualTo(1);
++        assertThat(messageRepo.countByOrganizationId(organizationId)).isEqualTo(1);
++    }
++
++    @Test
++    @Order(2)
++    void replayAfterContextRestartIsStillRejectedAsDuplicate() throws Exception {
++        // New Spring context (test 1 destroyed it), SAME database. Statics from
++        // test 1 describe the original delivery.
++        assertThat(organizationId).as("test 1 must run first").isNotNull();
++
++        long messagesBefore = messageRepo.countByOrganizationId(organizationId);
++        long deliveriesBefore = deliveryRepo.countByOrganizationId(organizationId);
++
++        MvcResult result = mockMvc.perform(signedJson(secret, organizationId.toString(), keyId,
++                        java.time.Instant.now().getEpochSecond(), FIXED_NONCE, FIXED_IDEM, body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("DUPLICATE"))
++                .andReturn();
++
++        // No second processing chain was created by the "restarted" application.
++        assertThat(deliveryRepo.countByOrganizationId(organizationId)).isEqualTo(deliveriesBefore);
++        assertThat(messageRepo.countByOrganizationId(organizationId)).isEqualTo(messagesBefore);
++        assertThat(deliveryRepo.findByOrganizationIdAndIdempotencyKey(organizationId, FIXED_IDEM))
++                .isPresent();
++
++        // A fresh nonce with the same key + same payload is still the original delivery.
++        mockMvc.perform(signedJson(secret, organizationId.toString(), keyId,
++                        java.time.Instant.now().getEpochSecond(),
++                        WebhookTestSupport.randomNonce(),
++                        FIXED_IDEM, body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.status").value("DUPLICATE"));
++
++        assertThat(deliveryRepo.countByOrganizationId(organizationId)).isEqualTo(deliveriesBefore);
++    }
++}
+diff --git a/src/test/java/com/kartgen/hireflow/WebhookSizeLimitIntegrationTest.java b/src/test/java/com/kartgen/hireflow/WebhookSizeLimitIntegrationTest.java
+new file mode 100644
+index 0000000..16e138b
+--- /dev/null
++++ b/src/test/java/com/kartgen/hireflow/WebhookSizeLimitIntegrationTest.java
+@@ -0,0 +1,224 @@
++package com.kartgen.hireflow;
++
++import com.kartgen.hireflow.support.TestResumePdf;
++import com.kartgen.hireflow.support.WebhookIntegrationTestSupport;
++import com.kartgen.hireflow.support.WebhookTestSupport;
++import org.junit.jupiter.api.Test;
++import org.springframework.boot.test.context.SpringBootTest;
++import org.springframework.mock.web.MockMultipartFile;
++import org.springframework.test.context.TestPropertySource;
++import org.springframework.test.web.servlet.MvcResult;
++import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
++
++import java.nio.charset.StandardCharsets;
++import java.time.Instant;
++import java.util.ArrayList;
++import java.util.Base64;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.UUID;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
++
++/**
++ * J-2 request-size enforcement, exercised with deliberately small limits
++ * (4 KB body, 1.5 KB per attachment, 2 attachments) so every boundary is
++ * hit through the real filter chain without allocating large payloads.
++ */
++@SpringBootTest(properties = {
++        "hireflow.webhook.max-body-bytes=8192",
++        "hireflow.webhook.max-attachment-bytes=1500",
++        "hireflow.webhook.max-attachments=2"
++})
++class WebhookSizeLimitIntegrationTest extends WebhookIntegrationTestSupport {
++
++    private static final long MAX_BODY = 8192;
++    private static final long MAX_ATTACHMENT = 1500;
++    private static final int MAX_ATTACHMENTS = 2;
++
++    @Test
++    void oversizedJsonBodyIsRejected() throws Exception {
++        var hook = hook("size-json");
++        byte[] tooLarge = jsonWithFiller(hook, new byte[0], 0, MAX_BODY + 1);
++
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-size-1"), tooLarge))
++                .andExpect(status().isPayloadTooLarge())
++                .andExpect(jsonPath("$.message").value("Webhook payload too large"));
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isZero();
++    }
++
++    @Test
++    void oversizedMultipartBodyIsRejected() throws Exception {
++        var hook = hook("size-mp");
++        byte[] bigPdf = pdfAtLeast(8000); // raw multipart body exceeds the 8192-byte body cap
++        List<WebhookTestSupport.FormPart> parts = multipartDelivery(
++                "hr@agency.example", "too big", "resume.pdf", bigPdf);
++
++        mockMvc.perform(performSignedMultipart(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-size-2"), parts))
++                .andExpect(status().isPayloadTooLarge())
++                .andExpect(jsonPath("$.message").value("Webhook payload too large"));
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isZero();
++    }
++
++    @Test
++    void oversizedMultipartAttachmentIsRejected() throws Exception {
++        var hook = hook("size-part");
++        byte[] bigPdf = pdfAtLeast(1600); // part exceeds max-attachment-bytes, body stays under 4096
++        List<WebhookTestSupport.FormPart> parts = multipartDelivery(
++                "hr@agency.example", "big part", "resume.pdf", bigPdf);
++
++        mockMvc.perform(performSignedMultipart(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-size-3"), parts))
++                .andExpect(status().isPayloadTooLarge())
++                .andExpect(jsonPath("$.error").value("Attachment too large"));
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isZero();
++    }
++
++    @Test
++    void excessiveAttachmentCountIsRejected() throws Exception {
++        var hook = hook("size-count");
++        byte[] pdf = smallPdf();
++        List<WebhookTestSupport.FormPart> parts = new ArrayList<>();
++        parts.add(new WebhookTestSupport.FormPart("senderEmail", null, null, "hr@agency.example".getBytes()));
++        for (int i = 0; i <= MAX_ATTACHMENTS; i++) { // 3 files > limit of 2
++            parts.add(new WebhookTestSupport.FormPart("files", "resume-" + i + ".pdf",
++                    "application/pdf", pdf));
++        }
++
++        mockMvc.perform(performSignedMultipart(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-size-4"), parts))
++                .andExpect(status().isPayloadTooLarge())
++                .andExpect(jsonPath("$.error").value("Too many attachments"));
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isZero();
++    }
++
++    @Test
++    void oversizedDecodedBase64AttachmentIsRejected() throws Exception {
++        var hook = hook("size-b64");
++        byte[] decoded = new byte[(int) MAX_ATTACHMENT + 1]; // 1501 bytes > limit
++        new java.security.SecureRandom().nextBytes(decoded);
++        byte[] body = jsonDelivery("hr@agency.example", null, "b64 oversize", "blob.bin", decoded);
++
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-size-5"), body))
++                .andExpect(status().isPayloadTooLarge())
++                .andExpect(jsonPath("$.error").value("Attachment too large"));
++
++        assertThat(messageRepo.countByOrganizationId(hook.orgId())).isZero();
++    }
++
++    @Test
++    void validRequestAtBodyBoundaryRemainsAccepted() throws Exception {
++        var hook = hook("size-boundary");
++        byte[] pdf = smallPdf();
++        byte[] exact = jsonWithFiller(hook, pdf, 1, MAX_BODY); // body is exactly 4096 bytes
++
++        assertThat(exact.length).isEqualTo(MAX_BODY);
++        MvcResult result = mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-size-6"), exact))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.acceptedCount").value(1))
++                .andReturn();
++
++        UUID messageId = UUID.fromString(objectMapper.readTree(result.getResponse().getContentAsString())
++                .path("inboundMessageId").asText());
++        assertThat(attachmentRepo.findByMessageId(messageId)).hasSize(1);
++    }
++
++    @Test
++    void validRequestAtAttachmentBoundaryRemainsAccepted() throws Exception {
++        var hook = hook("size-attboundary");
++        byte[] exactlyAtLimit = new byte[(int) MAX_ATTACHMENT]; // 1500 bytes, at the boundary
++        new java.security.SecureRandom().nextBytes(exactlyAtLimit);
++        byte[] body = jsonDelivery("hr@agency.example", null, "at boundary", "blob.bin", exactlyAtLimit);
++
++        // Non-resume payload is queued through the delivery but skipped by the
++        // resume gatekeeper - the delivery itself must be accepted (202).
++        mockMvc.perform(performSignedJson(hook.credential(), hook.orgId().toString(),
++                        WebhookTestSupport.randomNonce(),
++                        WebhookTestSupport.randomIdempotencyKey("j2-size-7"), body))
++                .andExpect(status().isAccepted())
++                .andExpect(jsonPath("$.acceptedCount").value(0));
++    }
++
++    // ── Helpers ─────────────────────────────────────────────────────────────
++
++    private record Hook(WebhookOrg org, Credential credential) {
++        UUID orgId() { return org.org().getId(); }
++    }
++
++    private Hook hook(String prefix) throws Exception {
++        WebhookOrg org = newWebhookOrg(prefix);
++        Credential credential = provisionCredential(org);
++        return new Hook(org, credential);
++    }
++
++    /** JSON delivery body padded with an inert filler field to an exact byte size. */
++    private byte[] jsonWithFiller(Hook hook, byte[] attachment, int attachmentCount, long targetSize) {
++        try {
++            Map<String, Object> body = new LinkedHashMap<>();
++            body.put("senderEmail", "hr@agency.example");
++            body.put("subject", "boundary");
++            if (attachmentCount > 0) {
++                Map<String, Object> att = new LinkedHashMap<>();
++                att.put("filename", "resume.pdf");
++                att.put("data", Base64.getEncoder().encodeToString(attachment));
++                body.put("attachments", List.of(att));
++            } else {
++                body.put("attachments", List.of());
++            }
++            body.put("filler", "");
++            byte[] base = objectMapper.writeValueAsBytes(body);
++            // The filler value grows from "" to N chars, adding exactly N bytes.
++            long padding = targetSize - base.length;
++            if (padding < 0) {
++                throw new IllegalStateException("Base body already exceeds the configured boundary");
++            }
++            body.put("filler", "x".repeat((int) padding));
++            byte[] exact = objectMapper.writeValueAsBytes(body);
++            assertThat(exact.length).as("padded body size").isEqualTo(targetSize);
++            return exact;
++        } catch (IllegalStateException e) {
++            throw e;
++        } catch (Exception e) {
++            throw new IllegalStateException(e);
++        }
++    }
++
++    /** PDF padded with fast-growing pseudo-random content to reach at least minBytes. */
++    private byte[] pdfAtLeast(int minBytes) {
++        StringBuilder extra = new StringBuilder();
++        byte[] pdf = TestResumePdf.create(TestResumePdf.resume(
++                "J2 Size", "size." + UUID.randomUUID().toString().substring(0, 8) + "@example.test",
++                "Pune", 3, "Jan 2026"));
++        while (pdf.length < minBytes) {
++            int before = pdf.length;
++            for (int i = 0; i < 12; i++) {
++                extra.append(UUID.randomUUID()).append('\n');
++            }
++            pdf = TestResumePdf.create(TestResumePdf.resume(
++                    "J2 Size", "size." + UUID.randomUUID().toString().substring(0, 8) + "@example.test",
++                    "Pune", 3, "Jan 2026" + extra));
++            if (pdf.length <= before) {
++                throw new IllegalStateException("Unable to grow test PDF to the requested size");
++            }
++        }
++        return pdf;
++    }
++}
+diff --git a/src/test/java/com/kartgen/hireflow/support/IntegrationTestSupport.java b/src/test/java/com/kartgen/hireflow/support/IntegrationTestSupport.java
+index 012829f..29f9e2c 100644
+--- a/src/test/java/com/kartgen/hireflow/support/IntegrationTestSupport.java
++++ b/src/test/java/com/kartgen/hireflow/support/IntegrationTestSupport.java
+@@ -31,7 +31,6 @@ public abstract class IntegrationTestSupport {
+     public static final String ORG_ID = "11111111-1111-1111-1111-111111111111";
+     public static final String USER_ID = "22222222-2222-2222-2222-222222222222";
+     public static final String JOB_ID = "c0000001-0000-0000-0000-000000000001";
+-    public static final String WEBHOOK_SECRET = "hireflow-local-webhook-secret";
+ 
+     @Autowired
+     protected MockMvc mockMvc;
+diff --git a/src/test/java/com/kartgen/hireflow/support/WebhookIntegrationTestSupport.java b/src/test/java/com/kartgen/hireflow/support/WebhookIntegrationTestSupport.java
+new file mode 100644
+index 0000000..f7181aa
+--- /dev/null
++++ b/src/test/java/com/kartgen/hireflow/support/WebhookIntegrationTestSupport.java
+@@ -0,0 +1,213 @@
++package com.kartgen.hireflow.support;
++
++import com.fasterxml.jackson.databind.JsonNode;
++import com.kartgen.hireflow.mail.model.InboundAttachmentRepository;
++import com.kartgen.hireflow.mail.model.InboundMessageRepository;
++import com.kartgen.hireflow.ops.ProcessingJobRepository;
++import com.kartgen.hireflow.security.JwtService;
++import com.kartgen.hireflow.tenant.Organization;
++import com.kartgen.hireflow.tenant.OrganizationRepository;
++import com.kartgen.hireflow.tenant.OrganizationUser;
++import com.kartgen.hireflow.tenant.OrganizationUserRepository;
++import com.kartgen.hireflow.tenant.User;
++import com.kartgen.hireflow.tenant.UserRepository;
++import com.kartgen.hireflow.webhook.WebhookCredentialRepository;
++import com.kartgen.hireflow.webhook.WebhookDeliveryRepository;
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.test.web.servlet.MvcResult;
++import org.springframework.test.web.servlet.ResultActions;
++import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
++import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
++
++import java.nio.charset.StandardCharsets;
++import java.time.Instant;
++import java.util.ArrayList;
++import java.util.Base64;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import java.util.UUID;
++
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
++import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
++import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
++
++/**
++ * Shared fixtures for J-2 webhook security tests: synthetic organizations,
++ * credential provisioning through the real API, and independently signed
++ * JSON/multipart webhook requests.
++ */
++public abstract class WebhookIntegrationTestSupport extends IntegrationTestSupport {
++
++    protected static final String WEBHOOK_PATH = "/api/v1/mail-webhook/inbound";
++
++    @Autowired protected WebhookCredentialRepository credentialRepo;
++    @Autowired protected WebhookDeliveryRepository deliveryRepo;
++    @Autowired protected OrganizationRepository orgRepo;
++    @Autowired protected OrganizationUserRepository orgUserRepo;
++    @Autowired protected UserRepository userRepo;
++    @Autowired protected InboundMessageRepository messageRepo;
++    @Autowired protected InboundAttachmentRepository attachmentRepo;
++    @Autowired protected ProcessingJobRepository jobRepo;
++    @Autowired protected JwtService jwtService;
++
++    public record WebhookOrg(Organization org, User owner, OrganizationUser membership, String jwt) {}
++
++    public record Credential(String keyId, String secret) {}
++
++    protected WebhookOrg newWebhookOrg(String prefix) {
++        Organization org = orgRepo.save(Organization.builder()
++                .name("J2 " + prefix)
++                .slug("j2-" + prefix.toLowerCase(Locale.ROOT) + "-"
++                        + UUID.randomUUID().toString().substring(0, 8))
++                .status("ACTIVE")
++                .build());
++        User owner = userRepo.save(User.builder()
++                .email(prefix.toLowerCase(Locale.ROOT) + "-owner-"
++                        + UUID.randomUUID().toString().substring(0, 8) + "@example.test")
++                .displayName("J2 Owner " + prefix)
++                .passwordHash("unused-test-hash")
++                .build());
++        OrganizationUser membership = orgUserRepo.save(OrganizationUser.builder()
++                .organizationId(org.getId())
++                .userId(owner.getId())
++                .role("OWNER")
++                .status("ACTIVE")
++                .build());
++        String jwt = jwtService.generateToken(owner.getId(), owner.getEmail(), org.getId(), "OWNER");
++        return new WebhookOrg(org, owner, membership, jwt);
++    }
++
++    /** Provisions a credential through the real OWNER/ADMIN API. */
++    protected Credential provisionCredential(WebhookOrg org) throws Exception {
++        MvcResult result = mockMvc.perform(post("/api/v1/webhook-credentials")
++                        .header("Authorization", "Bearer " + org.jwt()))
++                .andExpect(status().isOk())
++                .andReturn();
++        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
++        return new Credential(body.path("keyId").asText(), body.path("secret").asText());
++    }
++
++    protected String membershipJwt(WebhookOrg org, String role, String prefix) {
++        User user = userRepo.save(User.builder()
++                .email(prefix.toLowerCase(Locale.ROOT) + "-"
++                        + UUID.randomUUID().toString().substring(0, 8) + "@example.test")
++                .displayName("J2 " + prefix)
++                .passwordHash("unused-test-hash")
++                .build());
++        orgUserRepo.save(OrganizationUser.builder()
++                .organizationId(org.org().getId())
++                .userId(user.getId())
++                .role(role)
++                .status("ACTIVE")
++                .build());
++        return jwtService.generateToken(user.getId(), user.getEmail(), org.org().getId(), role);
++    }
++
++    /** Builds a fresh signed JSON request builder (caller invokes perform per call). */
++    protected MockHttpServletRequestBuilder signedJson(String secret, String orgId, String keyId,
++                                                       long timestamp, String nonce, String idempotencyKey,
++                                                       byte[] body) {
++        String digest = WebhookTestSupport.sha256Hex(body);
++        String signature = WebhookTestSupport.hmacSha256Hex(secret, WebhookTestSupport.canonicalString(
++                orgId, keyId, String.valueOf(timestamp), nonce, "POST", WEBHOOK_PATH, idempotencyKey, digest));
++        return post(WEBHOOK_PATH)
++                .contentType("application/json")
++                .content(body)
++                .header("X-HireFlow-Org-Id", orgId)
++                .header("X-HireFlow-Key-Id", keyId)
++                .header("X-HireFlow-Timestamp", String.valueOf(timestamp))
++                .header("X-HireFlow-Nonce", nonce)
++                .header("X-HireFlow-Signature", signature)
++                .header("Idempotency-Key", idempotencyKey);
++    }
++
++    protected MockHttpServletRequestBuilder performSignedJson(Credential cred, String orgId, String nonce,
++                                                              String idempotencyKey, byte[] body) {
++        return signedJson(cred.secret(), orgId, cred.keyId(),
++                Instant.now().getEpochSecond(), nonce, idempotencyKey, body);
++    }
++
++    /** Builds a fresh signed multipart request builder; signature covers the raw encoded body. */
++    protected MockMultipartHttpServletRequestBuilder signedMultipart(String secret, String orgId, String keyId,
++                                                                     long timestamp, String nonce,
++                                                                     String idempotencyKey,
++                                                                     List<WebhookTestSupport.FormPart> parts) {
++        String boundary = "j2test" + UUID.randomUUID().toString().replace("-", "");
++        byte[] rawBody = WebhookTestSupport.multipartBody(boundary, parts);
++        String digest = WebhookTestSupport.sha256Hex(rawBody);
++        String signature = WebhookTestSupport.hmacSha256Hex(secret, WebhookTestSupport.canonicalString(
++                orgId, keyId, String.valueOf(timestamp), nonce, "POST", WEBHOOK_PATH, idempotencyKey, digest));
++
++        MockMultipartHttpServletRequestBuilder builder = multipart(WEBHOOK_PATH);
++        for (WebhookTestSupport.FormPart part : parts) {
++            if (part.filename() != null) {
++                builder.file(new org.springframework.mock.web.MockMultipartFile(
++                        part.name(), part.filename(), part.contentType(), part.content()));
++            } else {
++                // Form fields are exposed as request parameters; the raw body still
++                // carries them as multipart parts for the signature digest.
++                builder.param(part.name(), new String(part.content(), StandardCharsets.UTF_8));
++            }
++        }
++        builder.contentType("multipart/form-data; boundary=" + boundary);
++        builder.header("X-HireFlow-Org-Id", orgId);
++        builder.header("X-HireFlow-Key-Id", keyId);
++        builder.header("X-HireFlow-Timestamp", String.valueOf(timestamp));
++        builder.header("X-HireFlow-Nonce", nonce);
++        builder.header("X-HireFlow-Signature", signature);
++        builder.header("Idempotency-Key", idempotencyKey);
++        // Give the security filter the exact raw multipart bytes for digest verification.
++        builder.with(request -> {
++            request.setContent(rawBody);
++            return request;
++        });
++        return builder;
++    }
++
++    protected MockMultipartHttpServletRequestBuilder performSignedMultipart(Credential cred, String orgId,
++                                                                            String nonce, String idempotencyKey,
++                                                                            List<WebhookTestSupport.FormPart> parts) {
++        return signedMultipart(cred.secret(), orgId, cred.keyId(),
++                Instant.now().getEpochSecond(), nonce, idempotencyKey, parts);
++    }
++
++    protected byte[] jsonDelivery(String senderEmail, String originalSenderEmail, String subject,
++                                  String filename, byte[] content) {
++        Map<String, Object> body = new LinkedHashMap<>();
++        if (senderEmail != null) body.put("senderEmail", senderEmail);
++        if (originalSenderEmail != null) body.put("originalSenderEmail", originalSenderEmail);
++        if (subject != null) body.put("subject", subject);
++        Map<String, Object> attachment = new LinkedHashMap<>();
++        attachment.put("filename", filename);
++        attachment.put("data", Base64.getEncoder().encodeToString(content));
++        body.put("attachments", List.of(attachment));
++        try {
++            return objectMapper.writeValueAsBytes(body);
++        } catch (Exception e) {
++            throw new IllegalStateException(e);
++        }
++    }
++
++    protected List<WebhookTestSupport.FormPart> multipartDelivery(String senderEmail, String subject,
++                                                                  String filename, byte[] content) {
++        List<WebhookTestSupport.FormPart> parts = new ArrayList<>();
++        if (senderEmail != null) {
++            parts.add(new WebhookTestSupport.FormPart("senderEmail", null, null,
++                    senderEmail.getBytes(StandardCharsets.UTF_8)));
++        }
++        if (subject != null) {
++            parts.add(new WebhookTestSupport.FormPart("subject", null, null,
++                    subject.getBytes(StandardCharsets.UTF_8)));
++        }
++        parts.add(new WebhookTestSupport.FormPart("files", filename, "application/pdf", content));
++        return parts;
++    }
++
++    protected byte[] smallPdf() {
++        return TestResumePdf.create(TestResumePdf.resume(
++                "J2 Candidate", "j2." + UUID.randomUUID().toString().substring(0, 8)
++                        + "@example.test", "Pune", 3, "Jan 2026"));
++    }
++}
+diff --git a/src/test/java/com/kartgen/hireflow/support/WebhookTestSupport.java b/src/test/java/com/kartgen/hireflow/support/WebhookTestSupport.java
+new file mode 100644
+index 0000000..08ac19b
+--- /dev/null
++++ b/src/test/java/com/kartgen/hireflow/support/WebhookTestSupport.java
+@@ -0,0 +1,102 @@
++package com.kartgen.hireflow.support;
++
++import javax.crypto.Mac;
++import javax.crypto.spec.SecretKeySpec;
++import java.io.ByteArrayOutputStream;
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
++import java.security.SecureRandom;
++import java.util.List;
++import java.util.UUID;
++
++/**
++ * Independent implementation of the documented webhook signing contract
++ * (docs/webhook-security.md). Deliberately does NOT reuse the production
++ * verifier's code, so the integration tests validate the contract itself.
++ */
++public final class WebhookTestSupport {
++
++    private static final SecureRandom RANDOM = new SecureRandom();
++    private static final String NONCE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
++
++    private WebhookTestSupport() {}
++
++    public static String sha256Hex(byte[] body) {
++        try {
++            byte[] digest = MessageDigest.getInstance("SHA-256").digest(body);
++            return toHex(digest);
++        } catch (Exception e) {
++            throw new IllegalStateException(e);
++        }
++    }
++
++    public static String hmacSha256Hex(String secret, String payload) {
++        try {
++            Mac mac = Mac.getInstance("HmacSHA256");
++            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
++            return toHex(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
++        } catch (Exception e) {
++            throw new IllegalStateException(e);
++        }
++    }
++
++    /** Canonical v1 signing string - must match docs/webhook-security.md exactly. */
++    public static String canonicalString(String organizationId, String keyId, String timestamp, String nonce,
++                                         String method, String requestPath, String idempotencyKey,
++                                         String bodySha256Hex) {
++        return String.join("\n",
++                "v1", organizationId, keyId, timestamp, nonce, method, requestPath,
++                idempotencyKey, bodySha256Hex);
++    }
++
++    public static String randomNonce() {
++        StringBuilder sb = new StringBuilder(32);
++        for (int i = 0; i < 32; i++) {
++            sb.append(NONCE_ALPHABET.charAt(RANDOM.nextInt(NONCE_ALPHABET.length())));
++        }
++        return sb.toString();
++    }
++
++    public static String randomIdempotencyKey(String prefix) {
++        return prefix + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
++    }
++
++    public record FormPart(String name, String filename, String contentType, byte[] content) {}
++
++    /** Encodes a raw multipart/form-data body; signature covers these exact bytes. */
++    public static byte[] multipartBody(String boundary, List<FormPart> parts) {
++        try {
++            ByteArrayOutputStream out = new ByteArrayOutputStream();
++            for (FormPart part : parts) {
++                out.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.US_ASCII));
++                StringBuilder disposition = new StringBuilder("Content-Disposition: form-data; name=\"")
++                        .append(part.name()).append("\"");
++                if (part.filename() != null) {
++                    disposition.append("; filename=\"").append(part.filename()).append("\"");
++                }
++                disposition.append("\r\n");
++                out.write(disposition.toString().getBytes(StandardCharsets.UTF_8));
++                if (part.contentType() != null) {
++                    out.write(("Content-Type: " + part.contentType() + "\r\n")
++                            .getBytes(StandardCharsets.US_ASCII));
++                }
++                out.write("\r\n".getBytes(StandardCharsets.US_ASCII));
++                out.write(part.content());
++                out.write("\r\n".getBytes(StandardCharsets.US_ASCII));
++            }
++            out.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.US_ASCII));
++            return out.toByteArray();
++        } catch (Exception e) {
++            throw new IllegalStateException(e);
++        }
++    }
++
++    private static String toHex(byte[] bytes) {
++        StringBuilder hex = new StringBuilder(bytes.length * 2);
++        for (byte b : bytes) {
++            hex.append(Character.forDigit((b >> 4) & 0xF, 16));
++            hex.append(Character.forDigit(b & 0xF, 16));
++        }
++        return hex.toString();
++    }
++}

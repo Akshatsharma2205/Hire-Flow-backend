@@ -1,0 +1,35 @@
+# ── Build ──
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ── IDE ──
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+.project
+.classpath
+.settings/
+bin/
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── Project-local JDK (downloaded, not committed) ──
+.jdk/
+
+# ── Local storage emulator ──
+.local-storage/
+
+# ── Logs ──
+*.log
+logs/
+
+# ── Environment ──
+.env
+*.env.local
+

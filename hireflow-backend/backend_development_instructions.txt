@@ -1,0 +1,586 @@
+Key Architectural Upgrades Added Beyond the Blueprint
+Java 21 Virtual Threads ( spring. threads. virtual. enabled=true ): Gives your Spring
+Boot backend massive concurrency for I/O-heavy IMAP email syncing, PDF parsing, and
+S3 uploads without complex reactive code. PDF +1
+All 5 Intake Channels Unified Behind One Pipeline:
+
+Channel 1-Chrome Extension V2 ( EXT_GMAIL / EXT_OUTLOOK ): Token-
+authenticated ( hf_ext _... ) intake + a Fast SHA-256 Pre-Check API so the
+extension doesn't even upload bytes if the file already exists. PDF +2
+
+Channel 2 -Universal IMAPS + App Password + Smart Filter: Connects to any mail
+server via Jakarta Mail with BODYSTRUCTURE partial fetch (never downloads
+email body text) and an in-memory PDFBox resume gatekeeper. PDF +2
+
+Channel 3-OAuth2 Adapter ( GMAIL / MS_GRAPH ): Supports encrypted
+oauth_secret_ref tokens and incremental sync_cursor ( historyId /
+deltaToken ) checkpoints. PDF +2
+
+0 Channel 4 - Inbound Forwarding Webhook ( FORWARDING ): Receives
+JSON/Multipart webhooks from AWS SES / SendGrid / Corporate Exchange rules.
+PDF + 2
+
+Channel 5 -Direct & Bulk ZIP/PDF Upload ( UPLOAD ): For HR drag-and-drop
+testing. PDF +2
+Pluggable Al Port (Zero-Blockage for Your Team): Since another team is building the Al
+model and full React UI, the backend defines a clean ResumeExtractionPort interface
+with two switchable implementations:
+
+LocalSmartHeuristicExtractor (Active by default in local profile): Uses
+Apache PDFBox + Apache Tika + deterministic regex/NLP rules to extract Name,
+Email, Phone, Linkedln, Skills, Experience Months, Education, and Location in <50ms
+locally with zero API cost. PDF +1
+
+ExternalAiServiceExtractor : Ready to call your Al team's Python/LLM
+microservice or Gemini/OpenAl strict-JSON endpoint via configurable URL/API key.
+PDF +1
+
+
+Zero-Friction Local Profile + Production Cloud Profile:In local mode, files store cleanly in ./.local-storage/s3-bucket/ with HMAC-signed local preview URLs (no AWS account needed to test), and background jobs run via transactional database polling (FOR UPDATE SKIP LOCKED).   In prod mode, it switches via config to AWS S3 Presigned URLs and AWS SQS.
+
+
+Built-in Local Developer & HR Test Console (http://localhost:8080): Serves a fast, clean single-page dashboard styled in your blueprint's off-white (#FAF9F6) and lavender (#CBC3E3) tokens so you can test extension tokens, IMAP sync, resume uploads, JD matching, and PDF viewing immediately.
+# MASTER ENGINEERING PROMPT: BUILD KARTGEN HIREFLOW AI BACKEND (JAVA 21 + SPRING BOOT 3)
+
+## 1. ROLE & OBJECTIVE
+You are a Principal Java Backend Architect. Build a complete, production-grade, high-performance **Java 21 + Spring Boot 3.3+** backend modular monolith for **Kartgen HireFlow AI** (an automated HR Resume Ingestion, Living Candidate Profile, Deduplication, and Job Description Matching platform), along with a built-in lightweight **Local Developer & HR Test UI** served at `http://localhost:8080`.
+
+The code must compile cleanly, pass tests, run out-of-the-box locally (`mvn spring-boot:run -Dspring-boot.run.profiles=local`), and remain 100% ready for cloud deployment (`prod` profile with PostgreSQL, Flyway, AWS S3, and AWS SQS). Do not leave `TODO` stubs for core business logic—implement working code for every module.
+
+---
+
+## 2. TECH STACK & PERFORMANCE REQUIREMENTS
+- **Language & Runtime:** Java 21 with Virtual Threads enabled (`spring.threads.virtual.enabled=true`) for maximum I/O concurrency across email syncing, file hashing, PDF parsing, and database queries.
+- **Framework:** Spring Boot 3.3.x (`spring-boot-starter-web`, `spring-boot-starter-data-jpa`, `spring-boot-starter-security`, `spring-boot-starter-validation`, `spring-boot-starter-mail`, `spring-boot-starter-actuator`).
+- **Database & Migrations:**
+  - Production & Docker Local: **PostgreSQL 16** + **Flyway** (`flyway-core`, `flyway-database-postgresql`).
+  - Zero-Docker Fast Local Fallback: Include H2 (`com.h2database:h2`) configured in `MODE=PostgreSQL` under profile `local-mem`, plus a `docker-compose.yml` for local PostgreSQL + MinIO (S3 compatible) under profile `local`.
+- **Document Parsing:**
+  - **Apache PDFBox 3.0.3** (`org.apache.pdfbox:pdfbox`) for fast PDF text extraction and page count checks.
+  - **Apache Tika 2.9.2** (`org.apache.tika:tika-core`, `org.apache.tika:tika-parsers-standard-package`) for real MIME-type magic-byte detection (`application/pdf`, DOCX) and `.docx`/`.doc` text extraction.
+- **Cloud & Storage SDK:** AWS SDK for Java v2 (`software.amazon.awssdk:s3`, `software.amazon.awssdk:sqs`) abstracted behind clean interfaces so `local` profile uses a local disk S3 emulator (`./.local-storage/s3/`) with signed local URLs, and `prod` profile uses real AWS S3 Presigned URLs.
+- **Authentication & Security:** JWT (`io.jsonwebtoken:jjwt-api:0.12.6`) for HR Dashboard users + Scoped API Tokens (`hf_ext_...`) for the Chrome Extension + AES-256-GCM encryption utility for storing IMAP App Passwords and OAuth refresh tokens (`oauth_secret_ref`).
+- **Utilities:** Lombok, Jackson (`jackson-datatype-jsr310`).
+
+---
+
+## 3. MODULAR MONOLITH PACKAGE STRUCTURE
+Create the project under base package `com.kartgen.hireflow` with strict modular boundaries:
+
+```text
+com.kartgen.hireflow
+├── HireFlowApplication.java
+├── config/               # Virtual threads, Async executors, CORS, Jackson, OpenAPI/Swagger
+├── common/               # TenantContext (ThreadLocal/ScopedValue), ApiError, PageResponse, CryptoUtil, HashUtil
+├── security/             # Spring Security filter chain, JwtService, ExtensionTokenAuthFilter, Role RBAC
+├── tenant/               # Organization, User, OrganizationUser entities, repos, controllers
+├── mail/                 # Multi-channel intake:
+│   ├── model/            # MailConnection, InboundMessage, InboundAttachment
+│   ├── channel/
+│   │   ├── ExtensionIntakeController.java     # Channel 1: Chrome Extension V2 intake + SHA-256 pre-check
+│   │   ├── UniversalImapSyncService.java      # Channel 2: Universal IMAPS (App Password/OAuth2) + Smart Filter
+│   │   ├── OAuthMailSyncAdapter.java          # Channel 3: Gmail historyId / MS Graph deltaToken adapter
+│   │   ├── ForwardingWebhookController.java   # Channel 4: Inbound SES/SendGrid/Exchange forwarding webhook
+│   │   └── DirectUploadController.java        # Channel 5: HR direct/bulk PDF/DOCX/ZIP upload
+│   └── service/          # MessageIngestionService (Direct vs Forwarded provenance & multi-attachment splitter)
+├── document/             # ResumeFile entity, StoragePort (LocalDiskStorageAdapter & S3StorageAdapter),
+│                         # TikaMimeDetector, PdfBoxTextExtractor, ResumeGatekeeperService
+├── extraction/           # Pluggable AI Port:
+│   ├── ResumeExtractionPort.java              # Interface for AI team integration
+│   ├── LocalSmartHeuristicExtractor.java      # Default fast regex/NLP extractor (no API key needed)
+│   ├── ExternalAiRestExtractor.java           # HTTP client to AI team's LLM service / Gemini JSON API
+│   └── dto/ExtractedResumeSchema.java         # Strict JSON contract (name, emails, phones, linkedin, skills, exp, edu)
+├── identity/             # Candidate, CandidateIdentifier, IdentityReviewCase, CandidateIdentityService
+├── profile/              # ResumeVersion, CandidateProfileVersion, CandidateExperienceSnapshot,
+│                         # Skill, SkillAlias, CandidateSkill, LivingProfileService (Atomic Guarded Promotion)
+├── jobs/                 # Job, JobVersion, JobSkillRequirement, JobService, JDAnalyzer
+├── matching/             # JobMatch, MatchService, MatchWorker (Explainable weighted scoring without reparsing PDFs)
+├── hiring/               # Application, ApplicationSubmission, ApplicationStageHistory, CandidateNote
+└── ops/                  # ProcessingJob, OutboxEvent, AuditEvent, AiUsageEvent, WorkerScheduler, HealthController
+
+
+4. COMPLETE DATABASE SCHEMA (FLYWAY V1__init_schema.sql & V2__seed_data.sql)
+Implement the exact physical schema below via Flyway migrations. Every tenant-owned table MUST include organization_id UUID NOT NULL:
+
+organizations: id (UUID PK), name (VARCHAR 200), slug (VARCHAR 100 UNIQUE), status (VARCHAR 24), default_timezone (VARCHAR 64), created_at (TIMESTAMPTZ).
+
+users: id (UUID PK), email (VARCHAR 320 UNIQUE), password_hash (VARCHAR 255), display_name (VARCHAR 200), auth_subject (VARCHAR 255), mfa_enabled (BOOLEAN), created_at (TIMESTAMPTZ).
+
+organization_users: id (UUID PK), organization_id (UUID FK), user_id (UUID FK), role (VARCHAR 32: OWNER, ADMIN, RECRUITER, MANAGER, AUDITOR), status (VARCHAR 24), extension_token_hash (VARCHAR 128), joined_at (TIMESTAMPTZ), version (BIGINT).
+
+mail_connections: id (UUID PK), organization_id (UUID FK), provider (VARCHAR 30: IMAP_APP_PASSWORD, GMAIL_OAUTH, MS_GRAPH_OAUTH, FORWARDING, CHROME_EXTENSION), mailbox_address (VARCHAR 320), imap_host (VARCHAR 200), imap_port (INT), folder_filter (VARCHAR 120 DEFAULT 'INBOX'), keyword_filter_json (TEXT), oauth_secret_ref (TEXT - AES-256 encrypted credential), permission_scope (TEXT), sync_cursor (TEXT), last_success_at (TIMESTAMPTZ), status (VARCHAR 30: ACTIVE, REAUTH, ERROR, PAUSED), created_by (UUID), created_at (TIMESTAMPTZ).
+
+inbound_messages: id (UUID PK), organization_id (UUID FK), connection_id (UUID nullable FK), provider_message_id (VARCHAR 500), internet_message_id (VARCHAR 500), sender_email (VARCHAR 320), sender_name (VARCHAR 200), original_sender_claim (VARCHAR 320), source_type (VARCHAR 30: DIRECT, FORWARDED, EXT_GMAIL, EXT_OUTLOOK, UPLOAD), subject (TEXT), received_at (TIMESTAMPTZ), processing_status (VARCHAR 30), failure_code (VARCHAR 80), created_at (TIMESTAMPTZ).
+
+Privacy Rule: NEVER add an email body column. Email conversation bodies must never be stored.
+
+Constraint: UNIQUE (organization_id, connection_id, provider_message_id).
+
+resume_files: id (UUID PK), organization_id (UUID FK), sha256 (CHAR(64)), s3_bucket (VARCHAR 200), s3_object_key (TEXT), size_bytes (BIGINT), mime_type (VARCHAR 120), malware_status (VARCHAR 30: CLEAN, QUARANTINED), extracted_raw_text (TEXT), created_at (TIMESTAMPTZ).
+
+Constraint: UNIQUE (organization_id, sha256).
+
+inbound_attachments: id (UUID PK), organization_id (UUID FK), message_id (UUID FK), attachment_index (INT), original_filename (TEXT), declared_mime (VARCHAR 120), detected_mime (VARCHAR 120), size_bytes (BIGINT), sha256 (CHAR(64)), resume_file_id (UUID nullable FK), status (VARCHAR 30).
+
+Constraint: UNIQUE (message_id, attachment_index).
+
+candidates: id (UUID PK), organization_id (UUID FK), display_name (VARCHAR 250), primary_email (VARCHAR 320), primary_phone (VARCHAR 50), linkedin_url (TEXT), current_resume_version_id (UUID nullable), current_profile_version_id (UUID nullable), current_experience_months (INT), experience_confidence (VARCHAR 24), current_city (VARCHAR 150), last_application_at (TIMESTAMPTZ), profile_updated_at (TIMESTAMPTZ), status (VARCHAR 24: ACTIVE, MERGED, ARCHIVED), version (BIGINT @Version).
+
+Index: INDEX (organization_id, last_application_at DESC, id).
+
+candidate_identifiers: id (UUID PK), organization_id (UUID FK), candidate_id (UUID FK), identifier_type (VARCHAR 25: EMAIL, PHONE, LINKEDIN), normalized_value (VARCHAR 500), source_type (VARCHAR 30: RESUME, SENDER, HR), verification_status (VARCHAR 24: VERIFIED, UNVERIFIED, CONFLICT), first_seen_at (TIMESTAMPTZ), last_seen_at (TIMESTAMPTZ).
+
+Index: INDEX (organization_id, identifier_type, normalized_value).
+
+resume_versions: id (UUID PK), organization_id (UUID FK), candidate_id (UUID FK), resume_file_id (UUID FK), version_number (INT), received_at (TIMESTAMPTZ), document_date (DATE nullable), source_attachment_id (UUID nullable), parse_status (VARCHAR 30: PENDING, READY, FAILED), validation_status (VARCHAR 30: VALID, REVIEW, INVALID), parser_version (VARCHAR 50), processed_at (TIMESTAMPTZ), promoted_at (TIMESTAMPTZ), superseded_at (TIMESTAMPTZ).
+
+Constraint: UNIQUE (organization_id, candidate_id, version_number).
+
+candidate_profile_versions: id (UUID PK), organization_id (UUID FK), candidate_id (UUID FK), resume_version_id (UUID FK), profile_version (BIGINT), full_name (VARCHAR 250), headline (VARCHAR 250), experience_months (INT), experience_basis (VARCHAR 50), location_text (VARCHAR 250), education_json (TEXT/JSONB), source_evidence_json (TEXT/JSONB), created_at (TIMESTAMPTZ).
+
+skills, skill_aliases, candidate_skills:
+
+skills: id (UUID PK), canonical_name (VARCHAR 150 UNIQUE), category (VARCHAR 80), active (BOOLEAN).
+
+skill_aliases: id (UUID PK), skill_id (UUID FK), alias_normalized (VARCHAR 150 UNIQUE).
+
+candidate_skills: id (UUID PK), organization_id (UUID FK), candidate_id (UUID FK), skill_id (UUID FK), profile_version_id (UUID FK), evidence_type (VARCHAR 30), confidence (NUMERIC(4,3)), last_confirmed_at (TIMESTAMPTZ).
+
+Index: INDEX (organization_id, skill_id, candidate_id).
+
+jobs, job_versions, job_skill_requirements, job_matches:
+
+jobs: id (UUID PK), organization_id (UUID FK), title (VARCHAR 250), department (VARCHAR 150), location (VARCHAR 200), status (VARCHAR 24: DRAFT, OPEN, CLOSED), current_version_id (UUID nullable), created_by (UUID), created_at (TIMESTAMPTZ).
+
+job_versions: id (UUID PK), organization_id (UUID FK), job_id (UUID FK), version_number (INT), jd_text (TEXT), jd_hash (CHAR(64)), min_experience_months (INT), max_experience_months (INT), requirements_json (TEXT), created_at (TIMESTAMPTZ).
+
+job_skill_requirements: id (UUID PK), job_version_id (UUID FK), skill_id (UUID FK), priority (VARCHAR 24: MUST, PREFERRED), weight (NUMERIC(6,3)).
+
+job_matches: id (UUID PK), organization_id (UUID FK), job_version_id (UUID FK), candidate_id (UUID FK), profile_version_id (UUID FK), scorer_version (VARCHAR 50), score (NUMERIC(6,3)), explanation_json (TEXT), status (VARCHAR 24: READY, STALE), computed_at (TIMESTAMPTZ).
+
+Constraint: UNIQUE (job_version_id, candidate_id, profile_version_id, scorer_version).
+
+applications, application_submissions, application_stage_history, candidate_notes:
+
+Do NOT put UNIQUE(candidate_id, job_id) on applications—allow repeat attempts via attempt_number.
+
+application_submissions has UNIQUE (organization_id, submission_fingerprint).
+
+identity_review_cases, processing_jobs, outbox_events, audit_events, ai_usage_events.
+
+Seed Data (V2__seed_data.sql):
+Seed 1 default organization (id = '11111111-1111-1111-1111-111111111111', name = 'Kartgen Infotech LLP', slug = 'kartgen'), 1 default HR Admin user (hr@kartgen.com / password password123), a pre-configured valid Chrome Extension Token hf_ext_live_org_kartgen_01_demo12345, 25 canonical tech skills with aliases (Java, Spring Boot, React, TypeScript, MySQL, PostgreSQL, AWS, Docker, Kubernetes, Kafka, Microservices, Python, Node.js, Hibernate, REST API), and 2 active Job Descriptions (Java Backend Developer and Full Stack React/Java Developer).
+
+
+
+5. ALL 5 EMAIL & RESUME INTAKE CHANNELS (DETAILED IMPLEMENTATION)
+Channel 1: Chrome Extension V2 Endpoints (ExtensionIntakeController)
+POST /api/v1/uploads/check-hashes:
+
+Accepts { "sha256List": ["..."] }.
+
+Returns which SHA-256 hashes already exist in resume_files for the tenant so the Chrome Extension can skip uploading bytes for existing files or link repeat submissions instantly.
+
+POST /api/v1/uploads/extension-intake:
+
+Authenticates via Authorization: Bearer hf_ext_... header or standard JWT.
+
+Accepts Multipart form: file, senderEmail, subject, sha256, sourceType (EXT_GMAIL or EXT_OUTLOOK), and optional jobId.
+
+Verifies magic bytes using Apache Tika (application/pdf or Word document), verifies SHA-256 integrity, deduplicates storage in resume_files, records inbound_messages + inbound_attachments, enqueues a PARSE_RESUME job in processing_jobs, and returns 202 Accepted in <50ms.
+
+Channel 2: Universal IMAPS + App Password + Smart Filter (UniversalImapSyncService)
+Works with ANY email provider (Gmail imap.gmail.com, Outlook outlook.office365.com, Zoho imap.zoho.com, Yahoo, or custom corporate IMAP on port 993).
+
+HR saves a mail_connections record with provider = 'IMAP_APP_PASSWORD', mailbox_address, oauth_secret_ref (AES-256 encrypted App Password), folder_filter (e.g., INBOX or a dedicated label like HireFlow), and keyword_filter_json (standard keywords + user-defined custom positive/negative keywords).
+
+Strict Privacy Implementation:
+
+Opens folder in Folder.READ_ONLY mode (never modifies or deletes HR's emails).
+
+Uses FetchProfile (ENVELOPE, CONTENT_INFO, UIDFolder.FetchProfileItem.UID) and mail.imaps.partialfetch=true.
+
+Tracks the highest IMAP UID in mail_connections.sync_cursor so subsequent syncs ONLY inspect newly arrived messages since the last checkpoint!
+
+Iterates MIME BodyParts: Explicitly skips text/plain and text/html body parts so private email text is never downloaded.
+
+Streams only .pdf, .docx, and .doc attachments into memory, runs ResumeGatekeeperService (verifies PDF/DOCX magic bytes and checks for at least 3 resume signals like experience, education, skills, projects, linkedin, github, rejecting invoices/receipts), and hands valid attachments to MessageIngestionService.
+
+Channel 3: OAuth2 Mail Sync Adapter (OAuthMailSyncAdapter)
+Implements a clean MailProviderSyncStrategy for GMAIL_OAUTH and MS_GRAPH_OAUTH.
+
+Stores encrypted OAuth refresh/access tokens in oauth_secret_ref, tracks Gmail historyId or Microsoft Graph deltaToken in sync_cursor, and uses IMAPS XOAUTH2 or REST delta calls to pull only new candidate attachments.
+
+Channel 4: Inbound Forwarding / Corporate Mail Rule Webhook (ForwardingWebhookController)
+POST /api/v1/mail-webhook/inbound:
+
+Accepts forwarded emails (from AWS SES, SendGrid Inbound Parse, or Exchange Transport Rules) containing sender headers, subject, and 1 to N attachments.
+
+Direct vs. Forwarded Provenance Rule (Blueprint Section B1):
+
+If an email comes from an internal HR address, agency, or college placement cell, or has subject prefixes (Fwd:, FW:), mark source_type = 'FORWARDED'.
+
+CRITICAL: Never use the forwarder's email as the candidate's identity! If 1 forwarded email has 10 resume PDFs attached, enumerate all 10 attachments into inbound_attachments (attachment_index 0..9) and resolve 10 separate candidates using the contact details extracted from inside each resume PDF.
+
+Channel 5: Direct & Bulk ZIP/PDF Upload (DirectUploadController)
+POST /api/v1/uploads/direct: Accepts single or multiple .pdf, .docx, or .zip archive of resumes (automatically unzips in memory, filters valid resumes, and processes each file asynchronously).
+
+
+
+6. ASYNC PROCESSING, AI EXTRACTION PORT & LIVING CANDIDATE PROFILE
+A. Fast Database-Backed Worker Queue (WorkerScheduler)
+Poll processing_jobs (status = 'PENDING' AND next_attempt_at <= NOW()) every 2 seconds using Virtual Threads.
+
+Support job types: PARSE_RESUME and RECOMPUTE_MATCHES.
+
+Implement exponential backoff (max 3 retries) and dead-letter status (FAILED -> creates a visible item in review-cases queue so HR never loses an unreadable resume).
+
+B. Pluggable AI Extraction Architecture (ResumeExtractionPort)
+Define ExtractedResumeSchema extract(String rawResumeText, String fileName, String senderEmailHint):
+
+LocalSmartHeuristicExtractor (@Primary when hireflow.ai.provider=local):
+
+Uses compiled Java Regex + section segmentation to accurately extract:
+
+fullName (top lines heuristic + email handle fallback)
+
+emails (normalized lowercase, excluding known HR/agency forwarder addresses)
+
+phones (normalized E.164 / 10-digit Indian & international phone numbers)
+
+linkedinUrl & githubUrl
+
+extractedSkills (matched against the database skills and skill_aliases catalog in memory with O(1) lookup)
+
+totalExperienceMonths (calculates from explicit date ranges like Jan 2022 - Present or claims like 4.5 years of experience; never auto-increments just because time passed)
+
+currentCity (matches major cities / locations)
+
+educationList (B.Tech, M.Tech, MCA, BCA, MBA, university names, graduation years)
+
+documentDate / sourceEvidenceJson (stores exact text snippets that proved experience and skills!).
+
+ExternalAiRestExtractor (active when hireflow.ai.provider=external):
+
+Sends rawResumeText to a configurable LLM / AI team endpoint (hireflow.ai.endpoint-url and hireflow.ai.api-key) with prompt-injection isolation boundaries and parses the strict JSON response into ExtractedResumeSchema, logging token usage in ai_usage_events.
+
+C. Identity Resolution & Atomic Living Profile Promotion (Blueprint Section B4, B5, C4)
+File Dedup vs. Person Identity:
+
+If resume_files already has (organization_id, sha256), reuse the stored file and extracted text without re-running PDFBox/AI!
+
+Candidate Resolution (CandidateIdentityService):
+
+For DIRECT mail, sender email + resume email are strong signals. For FORWARDED / EXT_GMAIL / UPLOAD, rely on the email, phone, and LinkedIn extracted from inside the resume.
+
+Look up candidate_identifiers (EMAIL, PHONE, LINKEDIN).
+
+If an exact verified match is found -> link to existing Candidate.
+
+If same email has a completely conflicting candidate name -> do NOT false-merge! Create an IdentityReviewCase (reason_code = 'CONFLICT') for the HR Review Queue.
+
+Otherwise -> create a new Candidate and register their identifiers in candidate_identifiers.
+
+Guarded Version Promotion (LivingProfileService):
+
+Create a new ResumeVersion (version_number = max + 1) and CandidateProfileVersion.
+
+Compare document freshness: if an agency forwards an older resume after a newer resume was already promoted, record the submission history in application_submissions but do NOT downgrade candidates.current_resume_version_id or current_profile_version_id.
+
+Use optimistic locking (@Version on Candidate) so out-of-order async workers never overwrite a newer version with an older version.
+
+D. Fast Indexed JD Matching (MatchService)
+When HR creates or updates a Job Description (POST /api/v1/jobs / POST /api/v1/jobs/{id}/versions), parse the JD once to extract required MUST and PREFERRED skills, min_experience_months, and location.
+
+Compute explainable match scores (0..100) against candidate_skills and current_experience_months:
+
+60% Must-Have Skills coverage
+
+20% Preferred Skills coverage
+
+20% Experience range fit
+
+Store the result + JSON breakdown (matchedSkills, missingSkills, experienceFit) in job_matches.
+
+Searching or filtering by JD on the dashboard queries the indexed job_matches and candidate_skills tables in <20ms—never reparsing PDFs!
+
+
+7. COMPLETE REST API CONTRACT TO IMPLEMENT
+Implement all endpoints below returning clean DTOs:
+
+POST /api/v1/auth/login & POST /api/v1/auth/extension-token (Generate/rotate scoped hf_ext_... token)
+
+POST /api/v1/mail-connections, GET /api/v1/mail-connections, POST /api/v1/mail-connections/{id}/sync-now, DELETE /api/v1/mail-connections/{id}
+
+POST /api/v1/uploads/check-hashes (SHA-256 pre-check)
+
+POST /api/v1/uploads/extension-intake (Chrome Extension V2 intake)
+
+POST /api/v1/uploads/direct (Multipart single/bulk PDF/DOCX/ZIP upload)
+
+POST /api/v1/mail-webhook/inbound (Simulated or real forwarded email webhook with multi-attachment support)
+
+GET /api/v1/candidates (Server-side pagination default 25, filter by search, skills list, jobId, minExpMonths, location, sourceType)
+
+GET /api/v1/candidates/{id} (Living Profile + current skills + evidence snippets)
+
+GET /api/v1/candidates/{id}/versions (All historical resume versions)
+
+GET /api/v1/candidates/{id}/applications (All job applications and submission events)
+
+GET /api/v1/resume-versions/{id}/view-url (Returns short-lived signed URL to stream the PDF on-demand)
+
+GET /api/v1/local-s3/{token} (Streams the PDF file bytes in local profile with Content-Type: application/pdf and Content-Disposition: inline)
+
+POST /api/v1/jobs, GET /api/v1/jobs, POST /api/v1/jobs/{id}/versions, GET /api/v1/jobs/{id}/matches
+
+GET /api/v1/applications, PATCH /api/v1/applications/{id}/stage (Uses expectedVersion optimistic concurrency check, returning HTTP 409 on conflict, and logs to application_stage_history)
+
+GET /api/v1/review-cases, POST /api/v1/review-cases/{id}/resolve
+
+GET /api/v1/operations/health (Queue depth, processed count, duplicate SHA-256 saved count, active mail connections, AI token spend)
+
+
+
+8. BUILT-IN LOCAL TESTING & HR CONSOLE (src/main/resources/static/index.html)
+Build a polished, responsive Single-Page Application in src/main/resources/static/index.html (using Vanilla JS + Tailwind CDN, styled with off-white #FAF9F6, surface #FFFFFF, lavender #CBC3E3, and dark slate #25233A) so the developer can test every backend capability in one place:
+
+Top KPI Bar: Total Candidates, Deduplicated Files (SHA-256 Saved), Qualified Matches, Pending Queue Jobs, and Active Extension Token display (with 1-click Copy for the Chrome Extension).
+
+Multi-Channel Intake Tester Panel:
+
+Tab A — Direct / Bulk Resume Upload: Drag-and-drop multiple PDFs/DOCX or a ZIP file, select DIRECT or FORWARDED mode, and watch them parse live.
+
+Tab B — Connect Email Inbox (IMAP App Password / OAuth / Folder Filter): Form to add a Gmail/Outlook/Zoho IMAP connection with custom keyword filters and a "Sync Inbox Now" button.
+
+Tab C — Simulate Forwarded Agency Email (10 Attachments Test): A 1-click test button that generates realistic sample PDF resumes in-browser (e.g., Rahul Sharma - Senior Java Spring Boot, Priya Patel - React Full Stack, Amit Verma - AWS DevOps, plus a repeat updated resume for Rahul Sharma) and sends them through the pipeline to demonstrate deduplication, Living Profile version promotion (V1 -> V2), and JD matching!
+
+JD Selector & Tech Skill Chips Bar: Dropdown to switch between active Job Descriptions (Java Backend Developer, Full Stack Developer, or + Create New JD modal) and clickable skill filter chips (Java, Spring Boot, React, MySQL, AWS, Docker).
+
+Live Candidate Table & Right-Hand Resume Drawer:
+
+Shows Name, Primary Email, Validated Experience, Skill Badges, JD Match Score %, Version Badge (V1, V2), Source Badge (EXT_GMAIL, IMAP, FORWARDED, UPLOAD), Pipeline Stage dropdown, and "View Resume" button.
+
+Clicking "View Resume" fetches GET /api/v1/resume-versions/{id}/view-url and renders the actual PDF inside a slide-over drawer along with the AI/Heuristic Evidence Snippets and Version History.
+
+
+
+
+9. EXECUTION STEPS
+Generate pom.xml, docker-compose.yml, and application.yml (application-local.yml and application-prod.yml).
+
+Create Flyway migrations V1__init_schema.sql and V2__seed_data.sql.
+
+Implement all entities, repositories, and the core services (StoragePort, ResumeGatekeeperService, LocalSmartHeuristicExtractor, CandidateIdentityService, LivingProfileService, MatchService, UniversalImapSyncService, and WorkerScheduler).
+
+Implement all REST Controllers (ExtensionIntakeController, DirectUploadController, ForwardingWebhookController, CandidateController, JobController, MailConnectionController, OperationsController).
+
+Create the complete src/main/resources/static/index.html testing console.
+
+Run mvn test and verify the application compiles and starts cleanly on port 8080
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

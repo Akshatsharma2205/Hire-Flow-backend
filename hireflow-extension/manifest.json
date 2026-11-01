@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "HireFlow AI — Smart Resume Extractor",
+  "version": "2.0.1",
+  "description": "Smart Gmail resume scanner with custom keyword filters, byte-level resume verification, SHA-256 deduplication, and token-secured Spring Boot upload.",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://*.googleusercontent.com/*",
+    "https://*.google.com/*",
+    "http://localhost:8080/*",
+    "http://127.0.0.1:8080/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "HireFlow AI Resume Scanner"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
