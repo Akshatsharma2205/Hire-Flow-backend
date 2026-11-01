@@ -1,6 +1,6 @@
 # HireFlow AI — Security Architecture & Hardening Specifications
 
-HireFlow AI enforces defense-in-depth principles across authentication, authorization, multi-tenant isolation, data integrity, cryptographic secret lifecycle, and external integration surfaces.
+HireFlow AI enforces defense-in-depth principles across authentication, authorization, multi-tenant isolation, data integrity, cryptographic secret lifecycle, external integration surfaces, and CI pipeline hygiene.
 
 ---
 
@@ -40,7 +40,7 @@ HireFlow employs three distinct authentication protocols tailored to specific ca
   - `X-HireFlow-Nonce`: Cryptographically random 16–128 character nonce unique per delivery attempt.
   - `X-HireFlow-Signature`: 64 lowercase hex characters: HMAC-SHA256 over 10-line canonical string (`v2\n{orgId}\n{keyId}\n{timestamp}\n{nonce}\n{method}\n{path}\n{idempotencyKey}\n{contentType}\n{bodySha256}`).
   - `Idempotency-Key`: Stable logical delivery identifier (8–200 characters).
-- **Timestamp Drift Protection**: Requests with timestamps diverging more than **300 seconds** (past or future) from server wall clock are immediately rejected with `401 Unauthorized`.
+- **Timestamp Drift Protection**: Requests with timestamps diverging more than **300 seconds** (past or future) from server wall clock are immediately rejected with `401 Unauthorized` (in `prod`, replay window must be >= 30 seconds).
 - **Timing Attack Resistance**: Signature validation strictly utilizes `MessageDigest.isEqual(expected, actual)`, preventing byte-by-byte timing discrepancy attacks.
 - **Idempotency Guarantee**: If an identical webhook payload is received with a known idempotency key, HireFlow short-circuits re-ingestion and returns an identical `200 OK` response without duplicate record creation.
 
@@ -55,6 +55,7 @@ HireFlow employs three distinct authentication protocols tailored to specific ca
 | **Document View Tokens** | `LocalDiskStorageAdapter` | 256-bit HMAC-SHA256 over `{objectKey}:{expiry}` | URL parameter: `base64url(payload).hmacHex` | Embedded in short-lived URL (TTL: 3600 seconds) | Automatically expires past TTL (returns HTTP 410 Gone); cannot be forged without server storage secret |
 | **Mailbox Secrets** | `MailConnectionController` | User-supplied IMAP App Password or OAuth Refresh Token | AES-256-GCM encrypted in `mail_connections.oauth_secret_ref` | Never displayed; masked as `***` in API responses | User can delete or pause connection anytime |
 | **JWT Signing Key** | `HireFlowProperties.jwt.secret` | >= 256 bits HMAC secret key | Environment variable `${JWT_SECRET}` | Never exposed over HTTP or in logs | Rotated via configuration update |
+| **Master Crypto Key** | `HireFlowProperties.crypto.secret-key` | 256 bits (64 hex characters) | Environment variable `${CRYPTO_SECRET_KEY}` | Never exposed over HTTP or in logs | Rotated via configuration update |
 
 ---
 
@@ -80,13 +81,73 @@ Physical file storage operations coordinate atomically with database transaction
 
 ## 6. Production Hardening & Startup Guards
 
-HireFlow implements strict fail-fast startup verifications in `StartupProfileGuard`:
-1. **Production Secret Entropy**: Rejects default, weak, or placeholder JWT and webhook secrets. In `prod`, secrets must exceed minimum length and entropy thresholds.
-2. **Datasource Validation**: In `prod`, the application refuses to start against in-memory H2 databases; an external PostgreSQL 15+ database is required.
-3. **Demo Credential Neutralization**: `ProductionDemoCredentialSanitizer` runs automatically on startup in production, clearing hardcoded demo password hashes and deactivating seeded demo organizations.
+HireFlow enforces strict startup safety across three complementary components:
+
+1. **`StartupProfileGuard` (`ApplicationContextInitializer`)**:
+   - Executes before the Spring ApplicationContext refreshes.
+   - Requires an explicit active profile (`SPRING_PROFILES_ACTIVE`) matching `local`, `test`, or `prod`.
+   - Refuses startup if `prod` and `local` are combined, preventing accidental loading of development seeders.
+2. **`ProductionSafetyConfig` (`@Configuration @Profile("prod")`)**:
+   - Executes during context initialization under the `prod` profile.
+   - Enforces `JWT_SECRET` minimum length (>= 32 chars) and non-default entropy (rejects `"CHANGE-ME"`).
+   - Enforces `CRYPTO_SECRET_KEY` format (must be exactly 64 hexadecimal characters, rejecting dev key).
+   - Enforces `STORAGE_PROVIDER=s3` and mandates non-blank `S3_BUCKET`.
+   - Enforces `CORS_ALLOWED_ORIGINS` non-null, rejecting `localhost` and `127.0.0.1`.
+   - Forbids `WEBHOOK_LOCAL_DEV_ENABLED` and `WEBHOOK_LOCAL_DEV_SECRET` in production.
+   - Enforces minimum webhook replay window (>= 30 seconds).
+3. **`ProductionDemoCredentialSanitizer` (`ApplicationRunner`)**:
+   - Runs post-startup under `prod` profile.
+   - Neutralizes default seeded demo user passwords (`hr@kartgen.com`).
+   - Disables seeded demo organizations (`11111111-1111-1111-1111-111111111111`).
+   - Clears demo extension token hashes in the database.
 
 ---
 
 ## 7. Zero-Secret Git Hygiene
 
-No production credentials, private keys, database passwords, or secret tokens are committed to source control. Configuration files rely on environment variable substitutions (`${DATABASE_URL}`, `${JWT_SECRET}`, `${WEBHOOK_SECRET}`).
+No production credentials, private keys, database passwords, or secret tokens are committed to source control. Configuration files rely on environment variable substitutions (`${DB_HOST}`, `${DB_PORT}`, `${DB_NAME}`, `${DB_PASSWORD}`, `${JWT_SECRET}`, `${CRYPTO_SECRET_KEY}`, `${S3_BUCKET}`, `${AI_API_KEY}`).
+
+---
+
+## 8. Continuous Integration (CI) Security Gates & Automated Pipeline Hygiene
+
+Automated verification is executed on every push and pull request to `main` via `.github/workflows/ci.yml`.
+
+### 8.1 Implemented CI Gates
+1. **Backend Compilation & Test Gate (`backend-test`)**:
+   - Compiles Java 21 codebase under Temurin JDK 21.
+   - Executes all 31 test suites (282 tests) against in-memory H2 (`MODE=PostgreSQL`).
+   - Packages executable JAR artifact.
+2. **Chrome Extension Security Gate (`extension-test`)**:
+   - Executes Node.js 20 test suite (11 tests).
+   - Verifies magic byte inspection, resume vs non-resume classification, and privacy gatekeeper blocking of invoices and receipts.
+3. **Repository Hygiene & Baseline Secret Scan (`repo-hygiene`)**:
+   - **Build Artifact Isolation**: Fails build if untracked build artifacts exist in Git (`hireflow-backend/target`, `hireflow-backend/.jdk`, `hireflow-backend/.local-storage`).
+   - **Baseline Regex Secret Scan**: Scans working tree using `git grep -I -E` across three high-risk credential patterns (excluding `.md` and `.txt` documentation):
+     - Private keys: `BEGIN (RSA|EC|DSA|OPENSSH|PGP) PRIVATE KEY`
+     - AWS Access Key IDs: `AKIA[0-9A-Z]{16}`
+     - GitHub Personal Access Tokens: `gh[pousr]_[0-9A-Za-z]{36}`
+     *Note*: Any pattern match causes immediate build failure (`exit 1`).
+   - **Documentation Completeness**: Enforces presence of 14 required engineering documents.
+
+### 8.2 Tracked Unfinished Work Ledger (Future Security Enhancements)
+To maintain strict technical honesty and audit transparency, the following capabilities are explicitly classified as **UNFINISHED WORK**:
+
+1. **PostgreSQL Testing in CI**:
+   - *Current State*: CI tests execute exclusively against in-memory H2 in PostgreSQL compatibility mode.
+   - *Limitation*: H2 does not replicate PostgreSQL row-locking concurrency, transaction isolation edge cases, or native PostgreSQL JSON operators.
+   - *Remediation Plan*: Add a `postgres:16-alpine` service container to `.github/workflows/ci.yml` or implement Testcontainers in the Maven test lifecycle.
+2. **Real Dependency Vulnerability Scanning**:
+   - *Current State*: Neither Maven (`pom.xml`) nor GitHub Actions CI has an automated dependency vulnerability scanner configured.
+   - *Limitation*: Known CVEs in third-party libraries (PDFBox, Tika, Jackson, AWS SDK, JJWT) are not automatically detected in the pipeline.
+   - *Remediation Plan*: Integrate `dependency-check-maven` (OWASP Dependency-Check) into `pom.xml` or add a Trivy / Snyk security scan step to CI.
+3. **CodeQL Static Application Security Testing (SAST)**:
+   - *Current State*: CodeQL and SAST linters (SpotBugs, SonarQube, Checkstyle) are unconfigured in CI.
+   - *Limitation*: Static code vulnerabilities and code quality flaws must be identified through manual code reviews.
+   - *Remediation Plan*: Add `.github/workflows/codeql.yml` scanning Java and JavaScript/TypeScript codebases.
+4. **Comprehensive Secret Detection**:
+   - *Current State*: CI performs a basic 3-pattern `git grep` regex scan on the working tree.
+   - *Limitation*: Does not scan full git commit history, entropy-based secrets, database connection strings, JWT secret tokens, or generic API keys.
+   - *Remediation Plan*: Integrate dedicated secret detection tooling (e.g. `gitleaks/gitleaks-action` or TruffleHog) with historical commit inspection.
+5. **Container Image Scanning**:
+   - *Current State*: Production container image builds and image vulnerability scans (Trivy / Grype) are pending deployment containerization.

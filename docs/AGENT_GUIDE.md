@@ -160,7 +160,7 @@ Security-sensitive changes require regression tests.
 - Verify transaction rollback behavior.
 - Verify duplicate and concurrency behavior.
 - Verify that database state and physical storage remain consistent.
-- Test production-critical database behavior against real PostgreSQL in CI.
+- Test production-critical database behavior against real PostgreSQL in CI (Note: containerized PostgreSQL testing in CI is tracked as unfinished work; current verification relies on in-memory H2 in PostgreSQL compatibility mode).
 - Do not treat H2 compatibility mode as proof of PostgreSQL correctness.
 
 ## 9. API and Frontend Independence
@@ -231,7 +231,7 @@ Use appropriate layers:
 - Unit tests for domain rules.
 - Integration tests for repositories and services.
 - HTTP tests for API contracts and security.
-- PostgreSQL-backed tests for database-critical behavior.
+- PostgreSQL-backed tests for database-critical behavior (tracked as unfinished work in CI; current suite runs on in-memory H2).
 - Browser E2E tests for real frontend interactions.
 - Extension tests for browser integration behavior.
 - Failure-injection tests for transactions and recovery.
@@ -246,23 +246,27 @@ Never delete or weaken a meaningful test simply to obtain a passing build.
 
 ## 13. Dependency and CI Quality Gates
 
-CI must execute real checks for:
+### Active CI Quality Gates (Enforced in `.github/workflows/ci.yml`)
+CI currently executes automated gates for:
+- Backend compilation, artifact packaging, and test execution (Java 21, Spring Boot 3.3.5, 31 suites / 282 tests against in-memory H2 in PostgreSQL compatibility mode).
+- Browser extension unit and security verification (Node.js 20, 11 tests).
+- Repository hygiene and uncommitted build artifact detection (`target/`, `.jdk/`, `.local-storage/`).
+- Baseline high-risk secret scanning via regex heuristics (private keys, AWS access key IDs, GitHub tokens).
+- Documentation completeness verification (validating required engineering documentation suite).
 
-- Compilation and tests.
-- Database integration tests.
-- Dependency vulnerability scanning.
-- Dependency update review.
-- Code vulnerability scanning.
-- Secret detection.
-- Formatting and static quality.
-- Frontend and extension build/tests where applicable.
-- Container scanning where applicable.
+### Tracked Unfinished CI Gates (Future Enhancements)
+The following quality gates are acknowledged architectural gaps and are tracked as unfinished work:
+- Containerized PostgreSQL integration testing in CI (testing against real PostgreSQL instances rather than H2 compatibility mode).
+- Real automated dependency vulnerability scanning (e.g., OWASP Dependency-Check, Snyk, Trivy).
+- CodeQL static application security testing (SAST) and automated vulnerability scanning.
+- Comprehensive secret detection across git commit history (e.g., Gitleaks, TruffleHog).
+- Container image scanning (pending production containerization pipeline).
 
 Critical and high-risk findings must block release unless an explicitly documented exception is approved.
 
 Keep CI efficient through caching, parallel jobs and appropriate scheduling.
 
-Do not create redundant scanning jobs that only increase execution time without improving protection.
+Do not claim comprehensive secret detection or dependency vulnerability scanning until real tools are integrated into the pipeline.
 
 ## 14. Documentation Rules
 
