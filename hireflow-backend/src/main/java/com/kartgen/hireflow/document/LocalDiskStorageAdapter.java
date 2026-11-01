@@ -37,20 +37,14 @@ public class LocalDiskStorageAdapter implements StoragePort {
         // uniquely owned by exactly one transaction/row.
         String objectKey = buildObjectKey(orgId, sha256, mimeType);
         Path base = Path.of(props.getStorage().getLocalBasePath()).toAbsolutePath().normalize();
-        Path finalPath = base.resolve(objectKey).normalize();
-        if (!finalPath.startsWith(base)) {
-            throw new IllegalArgumentException("Invalid storage object key");
-        }
+        Path finalPath = resolveSafePath(base, objectKey);
         // The full content is written to a uniquely named staging file in the
         // same directory, then published at the final key. A partial write can
         // therefore never expose a partial object at the final key, and a
         // pre-existing object at the final key is never overwritten (see
         // moveIntoPlace for the no-overwrite contract) and never deleted
         // (cleanup only ever targets the staging file this attempt created).
-        Path stagingPath = base.resolve(objectKey + ".staging-" + UUID.randomUUID()).normalize();
-        if (!stagingPath.startsWith(base)) {
-            throw new IllegalArgumentException("Invalid storage object key");
-        }
+        Path stagingPath = resolveSafePath(base, objectKey + ".staging-" + UUID.randomUUID());
         try {
             Files.createDirectories(finalPath.getParent());
             writeStagedFile(stagingPath, data);
@@ -171,10 +165,7 @@ public class LocalDiskStorageAdapter implements StoragePort {
     @Override
     public void delete(String objectKey) {
         Path base = Path.of(props.getStorage().getLocalBasePath()).toAbsolutePath().normalize();
-        Path path = base.resolve(objectKey).normalize();
-        if (!path.startsWith(base)) {
-            throw new IllegalArgumentException("Invalid storage object key");
-        }
+        Path path = resolveSafePath(base, objectKey);
         try {
             boolean deleted = Files.deleteIfExists(path);
             log.debug("Delete requested for local object key={} deleted={}", objectKey, deleted);
@@ -186,15 +177,24 @@ public class LocalDiskStorageAdapter implements StoragePort {
     @Override
     public byte[] retrieve(String objectKey) {
         Path base = Path.of(props.getStorage().getLocalBasePath()).toAbsolutePath().normalize();
-        Path path = base.resolve(objectKey).normalize();
-        if (!path.startsWith(base)) {
-            throw new IllegalArgumentException("Invalid storage object key");
-        }
+        Path path = resolveSafePath(base, objectKey);
         try {
             return Files.readAllBytes(path);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read file: " + path, e);
         }
+    }
+
+    private Path resolveSafePath(Path base, String objectKey) {
+        if (objectKey == null) {
+            throw new IllegalArgumentException("Invalid storage object key");
+        }
+        String sanitizedKey = objectKey.replace('\\', '/');
+        Path path = base.resolve(sanitizedKey).normalize();
+        if (!path.startsWith(base)) {
+            throw new IllegalArgumentException("Invalid storage object key");
+        }
+        return path;
     }
 
     @Override

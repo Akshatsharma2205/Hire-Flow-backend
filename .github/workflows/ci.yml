@@ -31,30 +31,7 @@ jobs:
         run: |
           sed -i 's/\r$//' mvnw || true
           chmod +x mvnw
-          ./mvnw test --batch-mode > maven-build.log 2>&1 || {
-            tail -n 100 maven-build.log
-            node -e '
-              const fs = require("fs");
-              if (fs.existsSync("maven-build.log")) {
-                const log = fs.readFileSync("maven-build.log", "utf8");
-                const lines = log.split(/\r?\n/).filter(l => l.trim());
-                const tail = lines.slice(-30).join("%0A");
-                console.log("::error title=Maven Failure Tail::" + tail);
-              }
-              const dir = "target/surefire-reports";
-              if (fs.existsSync(dir)) {
-                for (const f of fs.readdirSync(dir)) {
-                  if (f.endsWith(".txt")) {
-                    const c = fs.readFileSync(dir + "/" + f, "utf8");
-                    if (c.includes("FAILURE!") || c.includes("ERROR!")) {
-                      console.log("::error title=" + f + "::" + c.slice(0, 500).replace(/\r?\n/g, "%0A"));
-                    }
-                  }
-                }
-              }
-            '
-            exit 1
-          }
+          ./mvnw test --batch-mode
 
       - name: Upload Surefire Reports
         if: failure()
