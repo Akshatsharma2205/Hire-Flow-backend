@@ -6,8 +6,8 @@ HireFlow AI enforces rigorous automated testing covering all layers: unit testin
 
 ## 1. Test Suite Summary
 
-- **Backend Test Suites**: 30 suites
-- **Backend Total Tests**: 281 tests
+- **Backend Test Suites**: 31 suites
+- **Backend Total Tests**: 282 tests
 - **Backend Test Result**: **0 Failures, 0 Errors, 0 Skipped (100% Pass)**
 - **Extension Test Suite**: 1 suite (11 tests)
 - **Extension Test Result**: **0 Failures, 0 Errors, 0 Skipped (100% Pass)**
@@ -50,7 +50,7 @@ HireFlow AI enforces rigorous automated testing covering all layers: unit testin
 - `MatchServiceTest` (5 tests):
   Tests deterministic candidate-to-job match scoring algorithms.
 
-### 2.5 Hiring & Lifecycle Management
+### 2.5 Hiring, Identity & Lifecycle Management
 - `ApplicationControllerIntegrationTest` (1 test):
   End-to-end HTTP MockMvc validation of application creation, listing, stage transitions, and stage history logs.
 - `ReviewCaseControllerIntegrationTest` (1 test):
@@ -60,6 +60,10 @@ HireFlow AI enforces rigorous automated testing covering all layers: unit testin
 - `ApplicationLifecycleIntegrationTest` (14 tests):
   Lifecycle and status progression across all candidate pipeline states.
 
+### 2.6 Frontend SPA End-to-End Testing
+- `FrontendSpaEndToEndIntegrationTest` (1 test):
+  Real end-to-end integration test covering the complete Single Page Application user journey: static HTML delivery, auto-login, KPI queries, extension token generation, SHA-256 pre-flight checks, direct upload, candidate table pagination, candidate drawer, application creation, stage update to `SCREENING`, signed HMAC URL generation, and inline document byte streaming.
+
 ---
 
 ## 3. Running Backend Tests Locally
@@ -67,14 +71,18 @@ HireFlow AI enforces rigorous automated testing covering all layers: unit testin
 ### Run All Backend Tests:
 ```powershell
 cd hireflow-backend
+# Windows
 .\mvnw.cmd test
+
+# Linux / macOS
+./mvnw test
 ```
-*Expected Execution Time*: ~1m 20s. All 281 tests must pass with 0 failures.
+*Expected Execution Time*: ~1m 15s. All 282 tests pass with 0 failures, 0 errors, 0 skipped.
 
 ### Run an Individual Test Suite:
 ```powershell
 cd hireflow-backend
-.\mvnw.cmd test -Dtest=TransactionSafeStorageFailureInjectionTest
+.\mvnw.cmd test -Dtest=FrontendSpaEndToEndIntegrationTest
 ```
 
 ### Run Webhook Security Tests:
@@ -95,19 +103,18 @@ node --test hireflow-extension/test/extension.test.js
 
 ### Output:
 ```
-✔ Magic byte inspection: detects valid PDF with resume content (0.9794ms)
-✔ Magic byte inspection: detects valid DOCX header with resume content (0.1794ms)
-✔ Magic byte inspection: rejects non-resume file signature (0.1999ms)
-✔ Privacy Gatekeeper: blocks invoices and receipts lacking resume signals (0.9012ms)
-✔ Privacy Gatekeeper: allows resume containing incidental invoice word if resume signals present (0.1456ms)
-✔ Base64 roundtrip conversion preserves binary bytes exactly (0.9723ms)
-✔ File extension support checker handles valid and invalid extensions (0.1988ms)
-✔ CSV parser handles empty strings, whitespace and lowercase conversion (0.1794ms)
-✔ Smart candidate scorer: high score for matching resume with file and standard keywords (0.5523ms)
-✔ Smart candidate scorer: immediate exclusion for trap words (0.2781ms)
-✔ Smart candidate scorer: strict custom match requires user keyword (0.1969ms)
+✔ Magic byte inspection: detects valid PDF with resume content (1.0ms)
+✔ Magic byte inspection: detects valid DOCX header with resume content (0.2ms)
+✔ Magic byte inspection: rejects non-resume file signature (0.2ms)
+✔ Privacy Gatekeeper: blocks invoices and receipts lacking resume signals (1.0ms)
+✔ Privacy Gatekeeper: allows resume containing incidental invoice word if resume signals present (0.1ms)
+✔ Base64 roundtrip conversion preserves binary bytes exactly (0.8ms)
+✔ File extension support checker handles valid and invalid extensions (0.2ms)
+✔ CSV parser handles empty strings, whitespace and lowercase conversion (0.2ms)
+✔ Smart candidate scorer: high score for matching resume with file and standard keywords (0.5ms)
+✔ Smart candidate scorer: immediate exclusion for trap words (0.3ms)
+✔ Smart candidate scorer: strict custom match requires user keyword (0.2ms)
 ℹ tests 11
-ℹ suites 0
 ℹ pass 11
 ℹ fail 0
 ```

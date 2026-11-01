@@ -12,11 +12,11 @@
   "host_permissions": [
     "https://mail.google.com/*",
     "https://*.googleusercontent.com/*",
-    "https://*.google.com/*",
+    "https://outlook.live.com/*",
+    "https://outlook.office.com/*",
+    "https://outlook.office365.com/*",
     "http://localhost:8080/*",
-    "http://127.0.0.1:8080/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
+    "http://127.0.0.1:8080/*"
   ],
   "optional_host_permissions": [
     "https://*/*"

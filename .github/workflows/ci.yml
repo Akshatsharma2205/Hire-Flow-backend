@@ -29,6 +29,7 @@ jobs:
       - name: Run Backend Tests
         working-directory: hireflow-backend
         run: |
+          sed -i 's/\r$//' mvnw || true
           chmod +x mvnw
           ./mvnw test --batch-mode
 
