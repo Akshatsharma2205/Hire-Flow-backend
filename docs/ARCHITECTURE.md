@@ -18,7 +18,6 @@ HireFlow AI is an enterprise-grade applicant tracking and intelligent candidate 
                            |  - JwtAuthenticationFilter                    |
                            |  - ExtensionTokenAuthFilter                   |
                            |  - WebhookAuthFilter                          |
-                           |  - TenantContextFilter                        |
                            +-----------------------------------------------+
                                                    |
                                                    v
@@ -48,7 +47,7 @@ The backend application (`hireflow-backend/src/main/java/com/kartgen/hireflow`) 
 ### 2.1 `tenant`
 - Manages multi-tenant boundaries (`Organization`, `User`, `OrganizationUser`).
 - Enforces strict tenant separation across all database operations. Every domain entity is partitioned by `organization_id`.
-- Tenant context is resolved dynamically in `TenantContextFilter` and stored in `TenantContextHolder` (using `ThreadLocal` compatible with Project Loom virtual threads).
+- Tenant context is resolved per-request in the security filters (JwtAuthenticationFilter, ExtensionTokenAuthFilter, WebhookAuthFilter) and bound to the thread via TenantContext (ThreadLocal<UUID>), cleared deterministically in filter finally blocks.
 
 ### 2.2 `security`
 - Stateless authentication and authorization via signed JSON Web Tokens (HMAC-SHA256) and Bearer extension tokens (`hf_ext_...`).
@@ -59,8 +58,8 @@ The backend application (`hireflow-backend/src/main/java/com/kartgen/hireflow`) 
 ### 2.3 `mail` & `mail.channel`
 - Ingestion endpoints:
   - `ForwardingWebhookController` (`/api/v1/mail-webhook/inbound`): Receives inbound email forwarding payloads with signature validation and deduplication.
-  - `DirectUploadController` (`/api/v1/uploads/resume`): Allows recruiters to upload candidate resumes directly.
-  - `ExtensionIntakeController` (`/api/v1/extension/upload`): Handles candidate captures streamed from the Chrome extension with SHA-256 pre-flight hash verification (`/api/v1/uploads/check-hashes`).
+  - `DirectUploadController` (`/api/v1/uploads/direct`): Allows recruiters to upload candidate resumes directly.
+  - `ExtensionIntakeController` (`/api/v1/uploads/extension-intake`): Handles candidate captures streamed from the Chrome extension with SHA-256 pre-flight hash verification (`/api/v1/uploads/check-hashes`).
 - `MessageIngestionService`: Orchestrates atomic persistence of raw messages, extraction of attachments, SHA-256 checksum computation, file storage synchronization, and asynchronous job queuing.
 
 ### 2.4 `document`
@@ -80,7 +79,7 @@ The backend application (`hireflow-backend/src/main/java/com/kartgen/hireflow`) 
   1. Exact normalized email address match.
   2. Exact normalized phone number match.
   3. Linked identity handles (LinkedIn, GitHub).
-- Discrepancies or ambiguous identities automatically generate an `IdentityReviewCase` requiring human recruiter adjudication (`/api/v1/identity-review-cases`).
+- Discrepancies or ambiguous identities automatically generate an `IdentityReviewCase` requiring human recruiter adjudication (`/api/v1/review-cases`).
 
 ### 2.7 `profile`
 - `LivingProfileService`: Maintains versioned snapshots of candidate profiles (`CandidateProfileVersion`, `ResumeVersion`).

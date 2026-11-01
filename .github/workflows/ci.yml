@@ -85,9 +85,30 @@ jobs:
             exit 1
           fi
 
+      - name: Scan for Exposed High-Risk Secrets
+        run: |
+          echo "Scanning for hardcoded credentials, private keys, and API tokens..."
+          SECRETS_FOUND=0
+          if git grep -I -E "BEGIN (RSA|EC|DSA|OPENSSH|PGP) PRIVATE KEY" -- ':!*.md' ':!*.txt' ; then
+            echo "Error: Private key found in repository!"
+            SECRETS_FOUND=1
+          fi
+          if git grep -I -E "AKIA[0-9A-Z]{16}" -- ':!*.md' ':!*.txt' ; then
+            echo "Error: AWS Access Key ID pattern found!"
+            SECRETS_FOUND=1
+          fi
+          if git grep -I -E "gh[pousr]_[0-9A-Za-z]{36}" -- ':!*.md' ':!*.txt' ; then
+            echo "Error: GitHub personal token found!"
+            SECRETS_FOUND=1
+          fi
+          if [ $SECRETS_FOUND -ne 0 ]; then
+            exit 1
+          fi
+          echo "Secret scan passed cleanly. No exposed credentials found."
+
       - name: Verify Documentation Completeness
         run: |
-          for doc in README.md REPOSITORY_STRUCTURE.md docs/ARCHITECTURE.md docs/API_REFERENCE.md docs/DATABASE.md docs/CLASS_REFERENCE.md docs/SECURITY.md docs/TESTING.md docs/EXTENSION.md docs/FINAL_VERIFICATION_REPORT.md; do
+          for doc in README.md AGENTS.md REPOSITORY_STRUCTURE.md docs/AGENT_GUIDE.md docs/ARCHITECTURE.md docs/API_REFERENCE.md docs/DATABASE.md docs/CLASS_REFERENCE.md docs/DEPLOYMENT.md docs/OPERATIONS.md docs/SECURITY.md docs/TESTING.md docs/EXTENSION.md docs/FINAL_VERIFICATION_REPORT.md; do
             if [ ! -f "$doc" ]; then
               echo "Missing required documentation file: $doc"
               exit 1

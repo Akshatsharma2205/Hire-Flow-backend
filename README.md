@@ -104,12 +104,15 @@ Comprehensive technical documentation is maintained in the `docs/` directory:
 
 | Document | Description |
 |---|---|
+| [**Engineering Rules**](docs/AGENT_GUIDE.md) | Authoritative HireFlow Engineering Rules (Sections 1-16) |
 | [**Architecture Guide**](docs/ARCHITECTURE.md) | Modular monolith topology, bounded contexts, transaction atomicity |
 | [**REST API Reference**](docs/API_REFERENCE.md) | Complete catalog of all 13 controllers, routes, request/response contracts |
 | [**Database & Schema**](docs/DATABASE.md) | 29 JPA entities, table schemas, Flyway migrations V1-V4, relationship matrix |
 | [**Java Class Reference**](docs/CLASS_REFERENCE.md) | Comprehensive class listing by package with single responsibilities |
 | [**Security Architecture**](docs/SECURITY.md) | HMAC v2 signatures, timing attack defense, tenant isolation, production guards |
 | [**Testing Guide**](docs/TESTING.md) | Test layers, failure-injection tests, MockMvc tests, execution commands |
+| [**Production Deployment**](docs/DEPLOYMENT.md) | Production deployment guide, environment variables, PostgreSQL setup |
+| [**Operations & Observability**](docs/OPERATIONS.md) | Operations runbooks, actuator health probes, queue health, disaster recovery |
 | [**Chrome Extension**](docs/EXTENSION.md) | Manifest V3 architecture, permissions, privacy gatekeeper, setup guide |
 | [**Final Verification Report**](docs/FINAL_VERIFICATION_REPORT.md) | Deep test logs, live runtime evidence, unverified aspects ledger |
 | [**Repository Structure**](REPOSITORY_STRUCTURE.md) | Directory organization and file layout |

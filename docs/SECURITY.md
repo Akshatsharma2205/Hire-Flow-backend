@@ -33,12 +33,13 @@ HireFlow employs three distinct authentication protocols tailored to specific ca
 
 ### 2.3 Webhook HMAC-SHA256 v2 Signatures
 - **Mechanism**: Modern HMAC-SHA256 signature scheme preventing tampering, spoofing, and replay attacks.
-- **Header Protocol**:
-  - `X-HireFlow-Key-Id`: Unique key identifier (`whk_...`) mapped to the tenant organization.
-  - `X-HireFlow-Timestamp`: Unix epoch seconds timestamp.
-  - `X-HireFlow-Signature`: Hex-encoded HMAC-SHA256 of canonical payload string:
-    `v2:${timestamp}:${requestBody}`
-  - `X-HireFlow-Idempotency-Key`: Client-assigned unique delivery UUID.
+- **Header Protocol** (exact names, enforced in `WebhookAuthFilter`):
+  - `X-HireFlow-Org-Id`: UUID of tenant organization.
+  - `X-HireFlow-Key-Id`: Organization credential identifier (`whk_` + 16 hex characters).
+  - `X-HireFlow-Timestamp`: Unix epoch seconds at send time.
+  - `X-HireFlow-Nonce`: Cryptographically random 16–128 character nonce unique per delivery attempt.
+  - `X-HireFlow-Signature`: 64 lowercase hex characters: HMAC-SHA256 over 10-line canonical string (`v2\n{orgId}\n{keyId}\n{timestamp}\n{nonce}\n{method}\n{path}\n{idempotencyKey}\n{contentType}\n{bodySha256}`).
+  - `Idempotency-Key`: Stable logical delivery identifier (8–200 characters).
 - **Timestamp Drift Protection**: Requests with timestamps diverging more than **300 seconds** (past or future) from server wall clock are immediately rejected with `401 Unauthorized`.
 - **Timing Attack Resistance**: Signature validation strictly utilizes `MessageDigest.isEqual(expected, actual)`, preventing byte-by-byte timing discrepancy attacks.
 - **Idempotency Guarantee**: If an identical webhook payload is received with a known idempotency key, HireFlow short-circuits re-ingestion and returns an identical `200 OK` response without duplicate record creation.

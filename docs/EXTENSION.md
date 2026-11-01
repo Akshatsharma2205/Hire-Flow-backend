@@ -67,14 +67,14 @@ To conserve bandwidth and prevent redundant storage calls:
                                                     |
                                                     v
                                     POST /api/v1/uploads/check-hashes
-                                    { "hashes": [sha256] }
+                                    { "sha256List": [sha256] }
                                                     |
                           +-------------------------+-------------------------+
                           |                                                   |
                      (Hash Exists)                                      (New File)
                           |                                                   |
                           v                                                   v
-           Reuse existing candidate profile                       POST /api/v1/extension/upload
+           Reuse existing candidate profile                       POST /api/v1/uploads/extension-intake
            and attach to target job.                              (Multipart file + metadata)
 ```
 

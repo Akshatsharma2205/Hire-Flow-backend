@@ -234,11 +234,25 @@ Base Path: `/api/v1/review-cases`
 
 ### `GET /api/v1/review-cases`
 Lists unresolved identity collision cases requiring recruiter review.
-- **Auth**: Bearer JWT
+- **Auth**: Bearer JWT (`OWNER`, `ADMIN`, `RECRUITER`, `HIRING_MANAGER`, `MANAGER`)
+- **Response `200 OK`**: `List<ReviewCaseDto>`
+  ```json
+  [
+    {
+      "id": "12345678-1234-1234-1234-123456789abc",
+      "candidateId": "8430e3b3-3869-4265-a10c-72e798117bf2",
+      "conflictingCandidateId": null,
+      "reasonCode": "PROCESSING_FAILED",
+      "details": "Job PARSE_RESUME failed after 3 attempts: Connection reset",
+      "resolution": null,
+      "createdAt": "2026-11-01T12:00:00Z"
+    }
+  ]
+  ```
 
 ### `POST /api/v1/review-cases/{id}/resolve`
 Resolves an identity review collision.
-- **Auth**: Bearer JWT (`OWNER`, `ADMIN`, `RECRUITER`, `MANAGER`)
+- **Auth**: Bearer JWT (`OWNER`, `ADMIN`, `RECRUITER`, `HIRING_MANAGER`, `MANAGER`)
 - **Request Body**:
   ```json
   {
@@ -246,6 +260,13 @@ Resolves an identity review collision.
   }
   ```
 - **Supported Resolutions**: `MERGED` or `DISMISSED`.
+- **Response `200 OK`**:
+  ```json
+  {
+    "status": "RESOLVED",
+    "resolution": "MERGED"
+  }
+  ```
 
 ---
 
@@ -334,11 +355,13 @@ Base Path: `/api/v1/mail-webhook`
 
 ### `POST /api/v1/mail-webhook/inbound`
 Secure webhook receiver for email forwarding services (SendGrid, Mailgun, Postmark, AWS SES).
-- **Auth**: HMAC-SHA256 v2 Headers:
+- **Auth**: HMAC-SHA256 v2 Headers (enforced in `WebhookAuthFilter`):
+  - `X-HireFlow-Org-Id`: Organization UUID
   - `X-HireFlow-Key-Id`: Organization webhook key identifier (`whk_...`)
-  - `X-HireFlow-Timestamp`: Unix epoch seconds
-  - `X-HireFlow-Signature`: Hex-encoded HMAC-SHA256 (`v2:${timestamp}:${body}`)
-  - `X-HireFlow-Idempotency-Key`: Unique delivery identifier
+  - `X-HireFlow-Timestamp`: Unix epoch seconds at send time
+  - `X-HireFlow-Nonce`: Cryptographically random 16–128 character nonce
+  - `X-HireFlow-Signature`: 64 lowercase hex HMAC-SHA256 over 10-line canonical string (`v2\n{orgId}\n{keyId}\n{timestamp}\n{nonce}\n{method}\n{path}\n{idempotencyKey}\n{contentType}\n{bodySha256}`)
+  - `Idempotency-Key`: Unique delivery identifier (8–200 characters)
 - **Content Types**: `application/json` or `multipart/form-data`
 - **Response `200 OK`**:
   ```json
@@ -357,19 +380,52 @@ Base Path: `/api/v1/webhook-credentials`
 
 ### `POST /api/v1/webhook-credentials`
 Provisions a new high-entropy HMAC secret key pair for the organization.
-- **Auth**: Bearer JWT (`OWNER` only)
-- **Response `201 Created`**:
+- **Auth**: Bearer JWT (`OWNER`, `ADMIN`)
+- **Response `200 OK`**:
   ```json
   {
     "keyId": "whk_7a1b2c3d4e5f6071",
-    "secret": "hf_sec_...",
-    "createdAt": "2026-11-01T12:00:00Z"
+    "secret": "hf_sec_..."
+  }
+  ```
+
+### `POST /api/v1/webhook-credentials/{keyId}/rotate`
+Revokes the current credential and issues a replacement in one atomic step.
+- **Auth**: Bearer JWT (`OWNER`, `ADMIN`)
+- **Response `200 OK`**:
+  ```json
+  {
+    "keyId": "whk_8b2c3d4e5f607182",
+    "secret": "hf_sec_..."
+  }
+  ```
+
+### `POST /api/v1/webhook-credentials/{keyId}/revoke`
+Revokes an active webhook credential immediately.
+- **Auth**: Bearer JWT (`OWNER`, `ADMIN`)
+- **Response `200 OK`**:
+  ```json
+  {
+    "keyId": "whk_7a1b2c3d4e5f6071",
+    "status": "REVOKED"
   }
   ```
 
 ### `GET /api/v1/webhook-credentials`
-Lists active webhook credentials for the organization (secrets are masked).
+Lists active webhook credentials for the organization (secrets are never returned).
 - **Auth**: Bearer JWT (`OWNER`, `ADMIN`)
+- **Response `200 OK`**:
+  ```json
+  [
+    {
+      "keyId": "whk_7a1b2c3d4e5f6071",
+      "status": "ACTIVE",
+      "createdAt": "2026-11-01T12:00:00Z",
+      "revokedAt": null,
+      "createdBy": "11111111-1111-1111-1111-111111111111"
+    }
+  ]
+  ```
 
 ---
 

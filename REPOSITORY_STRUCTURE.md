@@ -10,17 +10,21 @@ hireflow/
 ├── docs/                              # Comprehensive engineering documentation
 │   ├── audit-history/                 # Preserved audit packages and exact diff patches (J-1 through J-2B.2)
 │   ├── spec/                          # Product specification blueprint & architecture diagrams
+│   ├── AGENT_GUIDE.md                 # HireFlow Engineering Rules (Sections 1-16)
 │   ├── ARCHITECTURE.md                # System topology, core modules, ports & adapters, pipeline flows
 │   ├── API_REFERENCE.md               # Complete REST API catalog (13 controllers, endpoints, schemas, auth)
 │   ├── DATABASE.md                    # Entity-Relationship diagram, 29 tables, indexes, constraints, migrations
 │   ├── CLASS_REFERENCE.md             # Complete Java class inventory by package and responsibility
+│   ├── DEPLOYMENT.md                  # Production deployment guide, environment variables, PostgreSQL setup
+│   ├── OPERATIONS.md                  # Operations, health checks, background worker queue, disaster recovery
 │   ├── SECURITY.md                    # Defense-in-depth: HMAC v2, timing attack protection, tenant isolation
-│   ├── TESTING.md                     # Test strategy, 30 suites (281 tests), fixtures, failure-injection tests
+│   ├── TESTING.md                     # Test strategy, 31 suites (282 tests), fixtures, failure-injection tests
 │   ├── EXTENSION.md                   # Chrome Extension (Manifest V3) architecture, permissions, client tests
 │   ├── FINAL_VERIFICATION_REPORT.md   # Final deep verification report & evidence ledger
 │   └── webhook-security.md            # In-depth webhook signature specification
 ├── hireflow-backend/                  # Spring Boot 3.3.5 / Java 21 modular monolith application
 │   ├── .mvn/wrapper/                  # Maven Wrapper binary & configuration
+│   ├── mvnw                           # Maven Linux shell wrapper (LF)
 │   ├── mvnw.cmd                       # Maven Windows command wrapper
 │   ├── pom.xml                        # Maven project descriptor (Java 21, Spring Boot, Flyway, H2/PG, Tika)
 │   ├── docker-compose.yml             # Local PostgreSQL 16 container compose configuration
@@ -39,7 +43,7 @@ hireflow/
 │       │   │   ├── matching/                  # Deterministic candidate-to-job matching & scoring
 │       │   │   ├── ops/                       # Background worker scheduler, async jobs, outbox, audit
 │       │   │   ├── profile/                   # Living candidate profile versioning & skill taxonomy
-│       │   │   ├── security/                  # JWT auth, tenant context filter, extension tokens, roles
+│       │   │   ├── security/                  # JWT auth, extension tokens, roles, webhook HMAC auth
 │       │   │   ├── tenant/                    # Organizations, users, memberships, multi-tenant isolation
 │       │   │   └── webhook/                   # HMAC-SHA256 v2 webhook authentication & delivery tracking
 │       │   └── resources/
@@ -49,7 +53,7 @@ hireflow/
 │       │       ├── static/index.html          # Embedded Single Page Application (Tailwind + Vanilla JS)
 │       │       └── db/migration/              # Flyway SQL migrations (V1, V2, V3, V4)
 │       └── test/
-│           ├── java/com/kartgen/hireflow/     # 30 test suites across all layers (281 automated tests)
+│           ├── java/com/kartgen/hireflow/     # 31 test suites across all layers (282 automated tests)
 │           └── resources/
 │               └── application-test.yml       # Isolated test configuration profile
 ├── hireflow-extension/                # Chrome Extension (Manifest V3) for candidate resume intake
@@ -61,6 +65,7 @@ hireflow/
 │   └── test/
 │       └── extension.test.js          # Node.js automated test suite (magic bytes, trap words, scoring)
 ├── .gitignore                         # Comprehensive git ignore rules
+├── AGENTS.md                          # HireFlow Engineering Rules (Root)
 ├── README.md                          # Quick start guide, architecture overview, developer manual
 └── REPOSITORY_STRUCTURE.md           # This document
 ```
