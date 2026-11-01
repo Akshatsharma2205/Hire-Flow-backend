@@ -31,7 +31,23 @@ jobs:
         run: |
           sed -i 's/\r$//' mvnw || true
           chmod +x mvnw
-          ./mvnw test --batch-mode
+          ./mvnw test --batch-mode || {
+            echo "================ SUREFIRE REPORTS (FAILURES) ================"
+            for f in target/surefire-reports/*.txt; do
+              if grep -q "FAILURE\|ERROR" "$f" 2>/dev/null; then
+                echo "FILE: $f"
+                cat "$f"
+              fi
+            done
+            exit 1
+          }
+
+      - name: Upload Surefire Reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: hireflow-backend/target/surefire-reports/
 
       - name: Package Backend Artifact
         working-directory: hireflow-backend
