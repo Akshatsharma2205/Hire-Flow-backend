@@ -21,6 +21,24 @@ import { Badge } from '../components/common/Badge';
 import { Drawer } from '../components/common/Drawer';
 import { useToast } from '../components/common/Toast';
 
+const AVATAR_PALETTES = [
+  'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300',
+  'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/60 dark:border-indigo-800 dark:text-indigo-300',
+  'bg-purple-50 border-purple-200 text-purple-700 dark:bg-purple-950/60 dark:border-purple-800 dark:text-purple-300',
+  'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/60 dark:border-amber-800 dark:text-amber-300',
+  'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/60 dark:border-rose-800 dark:text-rose-300',
+  'bg-cyan-50 border-cyan-200 text-cyan-700 dark:bg-cyan-950/60 dark:border-cyan-800 dark:text-cyan-300',
+  'bg-teal-50 border-teal-200 text-teal-700 dark:bg-teal-950/60 dark:border-teal-800 dark:text-teal-300',
+];
+
+const getAvatarColor = (nameOrEmail: string) => {
+  let hash = 0;
+  for (let i = 0; i < nameOrEmail.length; i++) {
+    hash = nameOrEmail.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_PALETTES[Math.abs(hash) % AVATAR_PALETTES.length];
+};
+
 export const CandidatesPage: React.FC = () => {
   const { toast } = useToast();
 
@@ -32,6 +50,7 @@ export const CandidatesPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedJobFilter, setSelectedJobFilter] = useState('');
   const [selectedChannelFilter, setSelectedChannelFilter] = useState('');
+  const [quickFilter, setQuickFilter] = useState<'ALL' | 'HIGH_FIT' | 'UNRANKED' | 'UPLOAD' | 'EMAIL'>('ALL');
   const [isLoading, setIsLoading] = useState(true);
 
   // Detail Drawer state
@@ -119,6 +138,10 @@ export const CandidatesPage: React.FC = () => {
   const filteredCandidates = candidates.filter((c) => {
     const channel = c.sourceType || c.sourceChannel;
     if (selectedChannelFilter && channel && channel !== selectedChannelFilter) return false;
+    if (quickFilter === 'HIGH_FIT' && (c.matchScore == null || c.matchScore < 70)) return false;
+    if (quickFilter === 'UNRANKED' && c.matchScore != null) return false;
+    if (quickFilter === 'UPLOAD' && channel !== 'UPLOAD') return false;
+    if (quickFilter === 'EMAIL' && !['GMAIL_OAUTH', 'MS_GRAPH_OAUTH', 'IMAP'].includes(channel || '')) return false;
     return true;
   });
 
@@ -135,6 +158,66 @@ export const CandidatesPage: React.FC = () => {
         <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
           Showing <span className="text-slate-900 dark:text-white font-semibold">{totalElements}</span> candidates
         </div>
+      </div>
+
+      {/* Quick Filter Badges */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setQuickFilter('ALL')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            quickFilter === 'ALL'
+              ? 'bg-teal-700 text-white shadow-sm dark:bg-teal-500 dark:text-slate-950 font-semibold'
+              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
+          }`}
+        >
+          All Profiles
+        </button>
+        <button
+          type="button"
+          onClick={() => setQuickFilter('HIGH_FIT')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
+            quickFilter === 'HIGH_FIT'
+              ? 'bg-emerald-700 text-white shadow-sm dark:bg-emerald-500 dark:text-slate-950 font-semibold'
+              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
+          }`}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span>Top Matches (&ge;70%)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setQuickFilter('UNRANKED')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            quickFilter === 'UNRANKED'
+              ? 'bg-slate-800 text-white shadow-sm dark:bg-slate-700 dark:text-white font-semibold'
+              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
+          }`}
+        >
+          Unranked Profiles
+        </button>
+        <button
+          type="button"
+          onClick={() => setQuickFilter('EMAIL')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            quickFilter === 'EMAIL'
+              ? 'bg-indigo-700 text-white shadow-sm dark:bg-indigo-500 dark:text-slate-950 font-semibold'
+              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
+          }`}
+        >
+          Mailbox Ingested
+        </button>
+        <button
+          type="button"
+          onClick={() => setQuickFilter('UPLOAD')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            quickFilter === 'UPLOAD'
+              ? 'bg-teal-700 text-white shadow-sm dark:bg-teal-500 dark:text-slate-950 font-semibold'
+              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
+          }`}
+        >
+          Direct Uploads
+        </button>
       </div>
 
       {/* Filter and Search Controls */}
@@ -219,7 +302,7 @@ export const CandidatesPage: React.FC = () => {
                     >
                       <td className="py-4 px-5">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-slate-800 border border-teal-200 dark:border-slate-700 text-teal-700 dark:text-teal-400 font-bold flex items-center justify-center shrink-0">
+                          <div className={`w-9 h-9 rounded-xl border font-bold flex items-center justify-center shrink-0 shadow-xs ${getAvatarColor(cand.displayName || cand.primaryEmail)}`}>
                             {cand.displayName ? cand.displayName.charAt(0).toUpperCase() : 'C'}
                           </div>
                           <div>

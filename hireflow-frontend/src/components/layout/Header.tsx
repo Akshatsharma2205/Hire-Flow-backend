@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Sun,
   Moon,
+  Search,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -118,6 +119,22 @@ export const Header: React.FC<HeaderProps> = ({
             {breadcrumbs.page}
           </span>
         </nav>
+
+        {/* Global Quick Search (Desktop) */}
+        <div className="hidden lg:flex items-center mx-4 flex-1 max-w-xs">
+          <div
+            onClick={() => navigate('/candidates')}
+            className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-100/80 hover:bg-slate-200/60 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400 cursor-pointer transition-colors shadow-xs"
+          >
+            <span className="flex items-center gap-2 truncate">
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <span>Search candidates, jobs...</span>
+            </span>
+            <kbd className="hidden xl:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-slate-500 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded shadow-xs">
+              ⌘K
+            </kbd>
+          </div>
+        </div>
       </div>
 
       {/* Right Section: System Health + Theme Toggle + Org + Docs + Refresh */}

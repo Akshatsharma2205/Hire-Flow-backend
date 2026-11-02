@@ -242,7 +242,7 @@ export const MailboxesPage: React.FC = () => {
       {/* Cloud OAuth Provider Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Google Workspace */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-t-4 border-t-teal-600 dark:border-t-teal-400 rounded-2xl p-6 flex flex-col justify-between shadow-sm card-hover transition-all">
           <div>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-white border border-slate-200 dark:border-transparent flex items-center justify-center p-2 shrink-0">
@@ -290,7 +290,7 @@ export const MailboxesPage: React.FC = () => {
         </div>
 
         {/* Microsoft 365 */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-t-4 border-t-blue-600 dark:border-t-blue-500 rounded-2xl p-6 flex flex-col justify-between shadow-sm card-hover transition-all">
           <div>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-2 shrink-0">

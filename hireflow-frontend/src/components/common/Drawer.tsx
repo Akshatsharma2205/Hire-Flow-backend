@@ -42,7 +42,7 @@ export const Drawer: React.FC<DrawerProps> = ({
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/70 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-md transition-opacity animate-in fade-in duration-150"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -51,7 +51,7 @@ export const Drawer: React.FC<DrawerProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className={`w-screen ${widthClasses[width]} bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col`}
+          className={`w-screen ${widthClasses[width]} bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200 ease-out`}
         >
           {/* Header */}
           <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex items-start justify-between bg-white/95 dark:bg-slate-900/95 backdrop-blur">

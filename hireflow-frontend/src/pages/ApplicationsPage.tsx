@@ -341,13 +341,13 @@ export const ApplicationsPage: React.FC = () => {
         >
           <form onSubmit={handleStageTransition} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Target Pipeline Stage
               </label>
               <select
                 value={targetStage}
                 onChange={(e) => setTargetStage(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               >
                 {PIPELINE_STAGES.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -358,7 +358,7 @@ export const ApplicationsPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Recruiter Audit Note
               </label>
               <textarea
@@ -366,7 +366,7 @@ export const ApplicationsPage: React.FC = () => {
                 onChange={(e) => setStageNote(e.target.value)}
                 placeholder="Rationale for stage progression or interview score..."
                 rows={3}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
 

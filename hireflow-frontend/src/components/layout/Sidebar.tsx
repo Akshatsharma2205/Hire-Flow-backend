@@ -115,15 +115,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 to={item.path}
                 onClick={() => onCloseMobile?.()}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-colors ${
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-all duration-150 relative ${
                     isActive
-                      ? 'bg-teal-50 text-teal-700 border border-teal-200 font-medium dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800/40'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
+                      ? 'bg-teal-50 text-teal-700 border border-teal-200/80 font-semibold shadow-xs dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-800/60'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 hover:translate-x-0.5 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/60'
                   }`
                 }
                 title={collapsed ? item.name : undefined}
               >
-                <Icon className="w-4 h-4 shrink-0" />
+                <Icon className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" />
                 <span className={`truncate ${collapsed ? 'md:hidden' : ''}`}>{item.name}</span>
               </NavLink>
             );
