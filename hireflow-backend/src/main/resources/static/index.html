@@ -76,8 +76,8 @@
             <div class="text-xs text-gray-400 uppercase tracking-wider mb-1">Extension Token</div>
             <div class="flex items-center gap-2">
                 <code id="kpiExtToken" class="text-xs truncate max-w-[120px] text-gray-500">—</code>
-                <button onclick="copyExtToken()" class="text-hf-accent hover:text-hf-slate text-xs" title="Copy">📋</button>
-                <button onclick="generateExtToken()" class="text-hf-accent hover:text-hf-slate text-xs" title="Generate New">🔄</button>
+                <button onclick="copyExtToken()" class="text-hf-accent hover:text-hf-slate text-xs" title="Copy" aria-label="Copy Extension Token">📋</button>
+                <button onclick="generateExtToken()" class="text-hf-accent hover:text-hf-slate text-xs" title="Generate New" aria-label="Generate New Extension Token">🔄</button>
             </div>
         </div>
     </div>
@@ -424,7 +424,7 @@ Ready to test. Select an actual PDF or DOCX file and click "Dispatch File to Ext
 <div id="drawerPanel" class="drawer-panel fixed top-0 right-0 h-full w-full md:w-[520px] bg-hf-surface shadow-2xl z-50 translate-x-full overflow-y-auto">
     <div class="sticky top-0 bg-hf-surface border-b border-gray-100 px-5 py-4 flex items-center justify-between z-10">
         <h3 id="drawerTitle" class="text-sm font-semibold truncate">Resume Viewer</h3>
-        <button onclick="closeDrawer()" class="text-gray-400 hover:text-hf-slate text-lg">✕</button>
+        <button onclick="closeDrawer()" class="text-gray-400 hover:text-hf-slate text-lg" aria-label="Close Resume Viewer">✕</button>
     </div>
     <div id="drawerContent" class="p-5">
         <div class="text-center text-gray-400 py-10">Select a candidate to view resume</div>
@@ -436,7 +436,7 @@ Ready to test. Select an actual PDF or DOCX file and click "Dispatch File to Ext
     <div class="bg-hf-surface rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-sm font-semibold">Create New Job Description</h3>
-            <button onclick="closeJobModal()" class="text-gray-400 hover:text-hf-slate">✕</button>
+            <button onclick="closeJobModal()" class="text-gray-400 hover:text-hf-slate" aria-label="Close Job Description Modal">✕</button>
         </div>
         <form onsubmit="createJob(event)" class="space-y-3">
             <input id="jobTitle" type="text" required placeholder="Job Title" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
