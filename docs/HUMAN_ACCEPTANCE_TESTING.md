@@ -14,11 +14,9 @@ The table below lists every environment variable and configuration property genu
 | `SERVER_PORT` | HTTP Server | System admin (default `8080`) | System env / `application.yml` | Port binding | Both (Default: `8080`) |
 | `GOOGLE_OAUTH_CLIENT_ID` | Google Cloud | Google Cloud Console &rarr; Credentials | PowerShell / `.env` / Prod Secret | Google Gmail OAuth flow | Optional in dev, Required for Gmail |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Google Cloud | Google Cloud Console &rarr; Credentials | PowerShell / Prod Secret Manager | Server-side code exchange | Optional in dev, Required for Gmail |
-| `GOOGLE_OAUTH_REDIRECT_URI` | Google Cloud | Derived from deployment URL | PowerShell / `application.yml` | Redirect matching | Both (`http://localhost:8080/api/v1/mail-connections/oauth/google/callback`) |
-| `MICROSOFT_OAUTH_CLIENT_ID` | Microsoft Entra ID | Entra ID &rarr; App Registrations | PowerShell / `.env` / Prod Secret | Microsoft 365 OAuth flow | Optional in dev, Required for M365 |
-| `MICROSOFT_OAUTH_CLIENT_SECRET` | Microsoft Entra ID | Entra ID &rarr; Certificates & secrets | PowerShell / Prod Secret Manager | Server-side code exchange & PKCE | Optional in dev, Required for M365 |
-| `MICROSOFT_OAUTH_REDIRECT_URI` | Microsoft Entra ID | Derived from deployment URL | PowerShell / `application.yml` | Redirect matching | Both (`http://localhost:8080/api/v1/mail-connections/oauth/microsoft/callback`) |
-| `MICROSOFT_OAUTH_TENANT_ID` | Microsoft Entra ID | Entra ID &rarr; Overview (`common`) | PowerShell / `application.yml` | Multi-tenant auth token endpoint | Both (Default: `common`) |
+| `MS_OAUTH_CLIENT_ID` | Microsoft Entra ID | Entra ID &rarr; App Registrations | PowerShell / `.env` / Prod Secret | Microsoft 365 OAuth flow | Optional in dev, Required for M365 |
+| `MS_OAUTH_CLIENT_SECRET` | Microsoft Entra ID | Entra ID &rarr; Certificates & secrets | PowerShell / Prod Secret Manager | Server-side code exchange & PKCE | Optional in dev, Required for M365 |
+| `MS_OAUTH_TENANT` | Microsoft Entra ID | Entra ID &rarr; Overview (`common` or tenant ID) | PowerShell / `application.yml` | Microsoft auth token endpoint | Both (Default: `common`) |
 | `JWT_SECRET` | Auth & RBAC | Generated 256-bit secret string | PowerShell / Prod Secret Manager | Signing recruiter JWT tokens | Both (&ge; 32 characters in prod) |
 | `CRYPTO_SECRET_KEY` | Credential Encryption | 64-hex char AES-256 key | PowerShell / Prod Secret Manager | AES-256-GCM token encryption at rest | Both (64 hex characters) |
 | `STORAGE_PROVIDER` | Document Storage | Developer decision (`local` or `s3`) | `application.yml` | Resume binary persistence | Both (Default `local` in dev, `s3` in prod) |
@@ -26,6 +24,16 @@ The table below lists every environment variable and configuration property genu
 | `LOCAL_URL_SECRET` | Local Storage | Random secret string | `application.yml` | HMAC signing of presigned URLs | Local (Default `hireflow-local-hmac-key`) |
 | `DB_HOST`, `DB_PORT`, `DB_NAME` | Database | PostgreSQL server | Prod environment | PostgreSQL connection | Production only (Local uses in-memory H2) |
 | `DB_USERNAME`, `DB_PASSWORD` | Database | PostgreSQL server | Prod Secret Manager | PostgreSQL authentication | Production only |
+
+> [!NOTE]
+> **OAuth Callback URLs & Scopes**:  
+> Callback URLs are **not** configured via environment variables. `OAuthMailController` dynamically constructs redirect URIs from the incoming request (`ServletUriComponentsBuilder`). Register the following exact callback URLs in the provider developer consoles:
+> - **Google Authorized Redirect URI**: `http://localhost:8080/api/v1/mail-connections/oauth/google/callback`
+> - **Microsoft Platform Redirect URI (Web)**: `http://localhost:8080/api/v1/mail-connections/oauth/microsoft/callback`
+> 
+> Exact wire scopes requested by HireFlow:
+> - **Google**: `https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email`
+> - **Microsoft**: `offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read`
 
 ---
 
@@ -46,6 +54,7 @@ Follow these exact steps to register your Google OAuth credentials:
    - Add scopes:
      - `https://www.googleapis.com/auth/gmail.readonly` (Read resources, messages, and attachments)
      - `https://www.googleapis.com/auth/userinfo.email` (Discover connected mailbox address)
+   - Exact wire scopes requested by backend: `https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email`
 6. **Create OAuth 2.0 Web Client ID**:
    - Go to **APIs & Services &rarr; Credentials &rarr; Create Credentials &rarr; OAuth client ID**.
    - Application type: **Web application**.
@@ -80,6 +89,7 @@ Follow these steps to register your Microsoft 365 OAuth application:
      - `Mail.Read` (Read user mail and attachments)
      - `User.Read` (Sign in and read user profile / mailbox address)
      - `offline_access` (Maintain access to data / issue refresh tokens)
+   - Exact wire scopes requested by backend: `offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read`
    - Click **Grant admin consent** if testing within your corporate tenant.
 5. **Note Client IDs**: From the **Overview** page, record the **Application (client) ID**.
 
@@ -97,19 +107,22 @@ cd c:\Users\ragha\Desktop\hireflow
 $env:SPRING_PROFILES_ACTIVE = "local"
 
 # 3. Configure Google OAuth Credentials (replace with your real credentials)
+# Note: Redirect URI (http://localhost:8080/api/v1/mail-connections/oauth/google/callback)
+# is dynamically derived by the backend and registered in Google Cloud Console.
 $env:GOOGLE_OAUTH_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
 $env:GOOGLE_OAUTH_CLIENT_SECRET = "YOUR_GOOGLE_CLIENT_SECRET"
-$env:GOOGLE_OAUTH_REDIRECT_URI = "http://localhost:8080/api/v1/mail-connections/oauth/google/callback"
 
 # 4. Configure Microsoft OAuth Credentials (replace with your real credentials)
-$env:MICROSOFT_OAUTH_CLIENT_ID = "YOUR_MICROSOFT_CLIENT_ID_UUID"
-$env:MICROSOFT_OAUTH_CLIENT_SECRET = "YOUR_MICROSOFT_CLIENT_SECRET"
-$env:MICROSOFT_OAUTH_REDIRECT_URI = "http://localhost:8080/api/v1/mail-connections/oauth/microsoft/callback"
-$env:MICROSOFT_OAUTH_TENANT_ID = "common"
+# Note: Redirect URI (http://localhost:8080/api/v1/mail-connections/oauth/microsoft/callback)
+# is dynamically derived by the backend and registered in Microsoft Entra ID.
+$env:MS_OAUTH_CLIENT_ID = "YOUR_MICROSOFT_CLIENT_ID_UUID"
+$env:MS_OAUTH_CLIENT_SECRET = "YOUR_MICROSOFT_CLIENT_SECRET"
+$env:MS_OAUTH_TENANT = "common"
 
 # 5. Confirm environment variables are populated WITHOUT printing raw secrets:
-Write-Host "Google Client ID set: " (![string]::IsNullOrEmpty($env:GOOGLE_OAUTH_CLIENT_ID))
-Write-Host "Microsoft Client ID set: " (![string]::IsNullOrEmpty($env:MICROSOFT_OAUTH_CLIENT_ID))
+Write-Host "Google Client ID set:    " (![string]::IsNullOrEmpty($env:GOOGLE_OAUTH_CLIENT_ID))
+Write-Host "Microsoft Client ID set: " (![string]::IsNullOrEmpty($env:MS_OAUTH_CLIENT_ID))
+Write-Host "Microsoft Tenant set:    " (![string]::IsNullOrEmpty($env:MS_OAUTH_TENANT))
 
 # 6. Start the Spring Boot Backend (compiles and serves the React SaaS frontend)
 cd hireflow-backend
@@ -119,10 +132,11 @@ cd hireflow-backend
 To stop the application and clean up temporary session variables:
 ```powershell
 # Press Ctrl+C to stop Spring Boot, then clear variables:
-Remove-Item Env:\GOOGLE_OAUTH_CLIENT_ID
-Remove-Item Env:\GOOGLE_OAUTH_CLIENT_SECRET
-Remove-Item Env:\MICROSOFT_OAUTH_CLIENT_ID
-Remove-Item Env:\MICROSOFT_OAUTH_CLIENT_SECRET
+Remove-Item Env:\GOOGLE_OAUTH_CLIENT_ID -ErrorAction SilentlyContinue
+Remove-Item Env:\GOOGLE_OAUTH_CLIENT_SECRET -ErrorAction SilentlyContinue
+Remove-Item Env:\MS_OAUTH_CLIENT_ID -ErrorAction SilentlyContinue
+Remove-Item Env:\MS_OAUTH_CLIENT_SECRET -ErrorAction SilentlyContinue
+Remove-Item Env:\MS_OAUTH_TENANT -ErrorAction SilentlyContinue
 ```
 
 ---
