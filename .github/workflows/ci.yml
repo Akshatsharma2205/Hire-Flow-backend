@@ -161,7 +161,27 @@ jobs:
         run: |
           sed -i 's/\r$//' mvnw || true
           chmod +x mvnw
-          ./mvnw dependency:resolve -B || true
+          MAX_RETRIES=3
+          RETRY_DELAY=10
+          ATTEMPT=1
+          RESOLVED=0
+          while [ $ATTEMPT -le $MAX_RETRIES ]; do
+            echo "Resolving Maven dependencies (Attempt $ATTEMPT of $MAX_RETRIES)..."
+            if ./mvnw dependency:resolve -B --no-transfer-progress \
+                -Dmaven.wagon.http.retryHandler.count=3 \
+                -Dmaven.wagon.http.pool=false; then
+              RESOLVED=1
+              break
+            fi
+            echo "Attempt $ATTEMPT failed. Waiting ${RETRY_DELAY}s before retry..."
+            sleep $RETRY_DELAY
+            ATTEMPT=$((ATTEMPT + 1))
+            RETRY_DELAY=$((RETRY_DELAY * 2))
+          done
+          if [ $RESOLVED -ne 1 ]; then
+            echo "Error: Failed to resolve Maven dependencies after $MAX_RETRIES attempts."
+            exit 1
+          fi
 
       - name: Install Trivy Scanner
         run: |
@@ -169,7 +189,8 @@ jobs:
 
       - name: Run Trivy Vulnerability Scanner
         run: |
-          trivy fs --scanners vuln --severity CRITICAL,HIGH --format json --output trivy-results.json . || true
+          trivy fs --scanners vuln --severity CRITICAL,HIGH --ignorefile .trivyignore --format json --output trivy-results.json .
+          trivy fs --scanners vuln --severity CRITICAL,HIGH --ignorefile .trivyignore --exit-code 1 .
 
       - name: Upload Vulnerability Scan Report
         if: always()

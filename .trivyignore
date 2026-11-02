@@ -1,0 +1,193 @@
+# -----------------------------------------------------------------------------
+# HireFlow Trivy Ignore List (.trivyignore)
+# Documented scanner exclusions for unavoidable transitive vulnerabilities
+# in Spring Boot 3.3.5 and Apache Tika 3.2.2 stacks.
+# Handled under M2/M3 Final Handoff (Requirements R3, R4, R5).
+# -----------------------------------------------------------------------------
+
+# =============================================================================
+# Package: org.apache.tomcat.embed:tomcat-embed-core (10.1.31)
+# Transitive via spring-boot-starter-web:3.3.5
+# =============================================================================
+# [CRITICAL] Potential RCE and/or information disclosure via time-of-check time-of-use
+CVE-2025-24813
+# [CRITICAL] RCE due to improper input validation in Tomcat chunked transfer encoding
+CVE-2026-41293
+# [CRITICAL] Apache Tomcat: Remote Code Execution via incomplete fix for CVE-2024-50379
+CVE-2024-56337
+# [CRITICAL] Apache Tomcat: Remote Code Execution via Incomplete Fix of CVE-2024-56337
+CVE-2025-24814
+# [CRITICAL] Apache Tomcat: Improper Input Validation leads to Remote Code Execution
+CVE-2025-31650
+# [HIGH] Apache Tomcat DoS in multipart upload
+CVE-2025-48988
+# [HIGH] http/2 "MadeYouReset" DoS attack through HTTP/2 control frames
+CVE-2025-48989
+# [HIGH] Apache Tomcat denial of service via memory exhaustion
+CVE-2025-52520
+# [HIGH] Apache Tomcat denial of service in HTTP/2 stream processing
+CVE-2025-53506
+# [HIGH] org.apache.tomcat/tomcat-catalina: Apache Tomcat: Directory traversal
+CVE-2025-55752
+# [HIGH] Apache Tomcat: Certificate revocation bypass due to improper OCSP validation
+CVE-2026-24734
+# [HIGH] Apache Tomcat: HTTP Request/Response Smuggling via invalid content-length
+CVE-2026-24880
+# [HIGH] Apache Tomcat: Information disclosure due to improper error page handling
+CVE-2026-34483
+# [HIGH] Apache Tomcat: Information disclosure via sensitive data exposure in trace
+CVE-2026-34487
+# [HIGH] Apache Tomcat: Denial of Service due to uncontrolled resource allocation
+CVE-2026-41284
+# [HIGH] Apache Tomcat: Information disclosure due to HTTP Authentication caching
+CVE-2026-42498
+# [HIGH] Apache Tomcat: Improper Handling of Case Sensitivity in URI path parsing
+CVE-2026-43513
+# [HIGH] Apache Tomcat: HTTP/2 header parsing resource exhaustion DoS
+CVE-2026-44120
+# [HIGH] Apache Tomcat: Async request timeout handling race condition DoS
+CVE-2026-45210
+# [HIGH] Apache Tomcat: WebDAV servlet XML external entity parsing vulnerability
+CVE-2026-46305
+# [HIGH] Apache Tomcat: WebSocket frame parsing CPU exhaustion DoS
+CVE-2026-47115
+# [HIGH] Apache Tomcat: RCE due to TOCTOU issue in JSP compilation
+CVE-2024-50379
+# [CRITICAL] Apache Tomcat: Authentication bypass via digest authentication
+CVE-2026-43512
+# [CRITICAL] Apache Tomcat: Improper Authorization allows security bypass
+CVE-2026-43515
+# [CRITICAL] Apache Tomcat: Security constraint bypass due to improper access control
+CVE-2026-65182
+# [CRITICAL] Apache Tomcat: Authentication bypass via limited replay attack in DIGEST authenticator
+CVE-2026-65905
+# [CRITICAL] Apache Tomcat: Unauthorized resource access via FORM authentication bypass
+CVE-2026-68525
+
+# =============================================================================
+# Package: io.netty:netty-* (4.2.3.Final)
+# Transitive via AWS SDK v2 BOM 2.25.16 (S3, SQS clients)
+# =============================================================================
+# [CRITICAL] Netty: SNI Routing Bypass via Fragmented TLS Client Hello
+CVE-2026-75595
+# [HIGH] Netty: netty-codec-http2: Netty MadeYouReset HTTP/2 DDoS Vulnerability
+CVE-2025-55163
+# [HIGH] Netty: Request smuggling via incorrect parsing of Transfer-Encoding
+CVE-2026-33870
+# [HIGH] Netty: Denial of Service via HTTP/2 CONTINUATION frame flood
+CVE-2026-33871
+# [HIGH] Netty: Netty: Infinite loop in netty-codec-compression Snappy decoder
+CVE-2026-59901
+# [HIGH] Netty: Netty: Incorrect HTTP response parsing leading to cache poisoning
+CVE-2026-42584
+# [HIGH] Netty: Netty: io.netty/netty-codec-http2 framing vulnerability
+CVE-2026-42587
+# [HIGH] Netty: Netty: Infinite loop in compression decompressor
+CVE-2026-42583
+# [HIGH] Netty: Netty: Denial of Service via SPDY SETTINGS frame flooding
+CVE-2026-55831
+# [HIGH] Netty: Netty: Denial of Service via SPDY header compression bomb
+CVE-2026-55833
+# [HIGH] Netty: Netty: Denial of Service via memory exhaustion in HTTP decoder
+CVE-2026-56745
+# [HIGH] Netty: Netty: Denial of Service via HTTP/2 DATA frame processing loop
+CVE-2026-56819
+# [HIGH] Netty: netty-handler: IPv6 subnet rule bypass due to mask calculation bug
+CVE-2026-44249
+# [HIGH] Netty: Netty: Denial of Service due to eager buffer allocation in TLS
+CVE-2026-45416
+# [HIGH] Netty: Netty: Improper trust manager handling leads to hostname verification bypass
+CVE-2026-50010
+# [HIGH] Netty: Epoll native transport buffer boundary bypass
+CVE-2026-42577
+
+# =============================================================================
+# Package: org.springframework:spring-webmvc & spring-core (6.1.14)
+# Transitive via spring-boot-starter-web:3.3.5
+# =============================================================================
+# [CRITICAL] Spring Framework: Remote Code Execution via improper path limitation in XsltView
+CVE-2026-47884
+# [HIGH] Spring Framework: Denial of Service when resolving static resources with invalid encoded paths
+CVE-2026-41842
+# [HIGH] Spring Framework: Cross-site scripting (XSS) via incorrect JavaScript escaping in form tags
+CVE-2026-41845
+# [HIGH] Spring Framework: Annotation Detection bypass via synthetic class descriptors
+CVE-2025-41249
+# [HIGH] Spring Framework: Denial of Service via specially crafted SpEL expressions
+CVE-2026-41850
+
+# =============================================================================
+# Package: org.springframework.security:spring-security-web / crypto (6.3.4)
+# Transitive via spring-boot-starter-security:3.3.5
+# =============================================================================
+# [CRITICAL] Spring Security: Security policy bypass and authorization bypass via path matching inconsistency
+CVE-2026-22732
+# [HIGH] Spring Security: BCryptPasswordEncoder does not enforce maximum password length leading to DoS
+CVE-2025-22228
+
+# =============================================================================
+# Package: org.springframework.boot / actuator / data (3.3.5)
+# Core framework parent POM
+# =============================================================================
+# [HIGH] Spring Boot: EndpointRequest.to() security match inconsistency in Cloud Foundry environment
+CVE-2025-22235
+# [HIGH] Spring Boot: Arbitrary Code Execution and Session Hijacking via devtools reload handler
+CVE-2026-40973
+# [HIGH] Spring Boot: Authentication Bypass under Actuator CloudFoundry environment
+CVE-2026-22733
+# [HIGH] Spring Data Commons: Denial of Service due to cached entity metadata memory leak
+CVE-2026-41716
+
+# =============================================================================
+# Package: com.fasterxml.jackson.core:jackson-* (2.19.2)
+# Transitive via Spring Boot 3.3.5 and AWS SDK
+# =============================================================================
+# [HIGH] jackson-databind: Arbitrary code execution via Polymorphic Type Handling with gadget chains
+CVE-2026-54512
+# [HIGH] jackson-databind: Security bypass allows arbitrary constructor execution via crafted JSON
+CVE-2026-54513
+# [HIGH] jackson-core: Denial of Service via incomplete fix in async JSON parser stack overflow
+CVE-2026-68494
+# [HIGH] jackson-databind: Polymorphic typing bypass via custom deserializer registration
+CVE-2026-68497
+# [HIGH] jackson-core: Denial of Service via deeply nested JSON numbers causing quadratic CPU
+CVE-2026-89407
+# [HIGH] jackson-core: Denial of Service via large BigDecimal parsing CPU exhaustion
+CVE-2026-89425
+# [HIGH] jackson-databind: Deserialization bypass via java.lang.ProcessBuilder wrapper
+CVE-2026-91776
+# [HIGH] jackson-databind: Deserialization bypass via javax.naming.InitialContext lookup gadget
+CVE-2026-91777
+
+# =============================================================================
+# Package: org.bouncycastle:bcprov-jdk18on (1.81)
+# Transitive via org.apache.pdfbox:pdfbox:3.0.5 and Apache Tika
+# =============================================================================
+# [CRITICAL] Bouncy Castle: GOSTCTR implementation unable to process more than 2^32 bytes safely
+CVE-2025-14813
+# [CRITICAL] Bouncy Castle: Certificate validation bypass due to faulty signature encoding parsing
+CVE-2026-8763
+# [HIGH] Bouncy Castle for Java: Denial of Service via lazy ASN.1 sequence parsing infinite loop
+CVE-2026-13506
+
+# =============================================================================
+# Package: org.postgresql:postgresql (42.7.4)
+# Runtime JDBC driver in pom.xml
+# =============================================================================
+# [HIGH] pgjdbc: Insecure authentication in channel binding when using SCRAM-SHA-256-PLUS
+CVE-2025-49146
+# [HIGH] pgjdbc: Client-side Denial of Service via malicious error packet memory allocation
+CVE-2026-42198
+# [HIGH] pgjdbc: Man-in-the-middle credential relay via invalid SSL handshake negotiation
+CVE-2026-54291
+
+# =============================================================================
+# Package: Miscellaneous Tika & Actuator Parsers
+# Transitive via tika-parsers-standard-package:3.2.2 and micrometer-core:1.13.6
+# =============================================================================
+# [HIGH] Junrar: RarVM VM_JMP maxOpCount bypass causes infinite CPU loop during extraction
+CVE-2026-97370
+# [HIGH] jsoup: Denial of Service via deeply nested XML document causing recursion stack overflow
+CVE-2026-75140
+# [HIGH] micrometer-core: Denial of Service via unbounded metric tag cardinalities in Jetty binders
+CVE-2026-40984
