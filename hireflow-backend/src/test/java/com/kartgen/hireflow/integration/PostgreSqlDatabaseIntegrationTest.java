@@ -30,8 +30,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * In local development, executes if PostgreSQL is running on DB_HOST:DB_PORT (default localhost:5432),
  * or skips cleanly if the service container is not present.
  */
-@SpringBootTest
-@ActiveProfiles("postgres-test")
+@SpringBootTest(properties = {
+    "spring.datasource.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:hireflow_test}",
+    "spring.datasource.username=${DB_USERNAME:hireflow_user}",
+    "spring.datasource.password=${DB_PASSWORD:hireflow_ci_password}",
+    "spring.datasource.driver-class-name=org.postgresql.Driver",
+    "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect",
+    "spring.flyway.clean-disabled=true"
+})
+@ActiveProfiles("test")
 @ExtendWith(PostgreSqlDatabaseIntegrationTest.PostgreSqlAvailableCondition.class)
 @DisplayName("PostgreSQL 16 Database Reliability & Multi-Tenancy Integration Test")
 public class PostgreSqlDatabaseIntegrationTest {
@@ -51,8 +58,8 @@ public class PostgreSqlDatabaseIntegrationTest {
         );
 
         assertThat(appliedMigrations)
-                .as("Flyway must record successful execution of core migrations V1 through V5")
-                .contains("1", "2", "3", "4", "5");
+                .as("Flyway must record successful execution of core migrations V1 through V6")
+                .contains("1", "2", "3", "4", "5", "6");
     }
 
     @Test
