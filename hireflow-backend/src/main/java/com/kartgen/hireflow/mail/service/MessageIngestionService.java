@@ -8,6 +8,9 @@ import com.kartgen.hireflow.hiring.ApplicationService;
 import com.kartgen.hireflow.identity.Candidate;
 import com.kartgen.hireflow.identity.CandidateIdentityService;
 import com.kartgen.hireflow.identity.CandidateRepository;
+import com.kartgen.hireflow.identity.IdentityReviewCase;
+import com.kartgen.hireflow.identity.IdentityReviewCaseRepository;
+import com.kartgen.hireflow.rules.EmailRuleEngineService;
 import com.kartgen.hireflow.jobs.Job;
 import com.kartgen.hireflow.jobs.JobRepository;
 import com.kartgen.hireflow.jobs.JobVersionRepository;
@@ -60,6 +63,8 @@ public class MessageIngestionService {
     private final ResumeVersionRepository resumeVersionRepo;
     private final MatchService matchService;
     private final ApplicationService applicationService;
+    private final EmailRuleEngineService ruleEngine;
+    private final IdentityReviewCaseRepository reviewCaseRepo;
 
     // ── Channel 1: Chrome Extension ──
     @Transactional
@@ -90,7 +95,7 @@ public class MessageIngestionService {
                 .sourceType(sourceType != null ? sourceType : "EXT_GMAIL")
                 .jobId(jobId)
                 .receivedAt(Instant.now())
-                .processingStatus("QUEUED")
+                .processingStatus("DISCOVERED")
                 .build();
         messageRepo.save(message);
 
@@ -109,6 +114,8 @@ public class MessageIngestionService {
         attachmentRepo.save(attachment);
 
         enqueueParseJob(orgId, attachment.getId());
+        message.setProcessingStatus("QUEUED");
+        messageRepo.save(message);
         log.info("Extension intake queued: attachment={} org={}", attachment.getId(), orgId);
         return attachment.getId();
     }
@@ -140,6 +147,12 @@ public class MessageIngestionService {
         String sha256 = HashUtil.sha256Hex(data);
         ResumeFile resumeFile = getOrStoreResumeFile(orgId, sha256, mime, data);
 
+        EmailRuleEngineService.MessageEnvelope env = new EmailRuleEngineService.MessageEnvelope(
+                orgId, connectionId, "INBOX", senderEmail, senderName, subject, null,
+                List.of(new EmailRuleEngineService.AttachmentEnvelope(filename, mime, data.length))
+        );
+        EmailRuleEngineService.EvaluationDecision decision = ruleEngine.evaluate(env);
+
         InboundMessage message = InboundMessage.builder()
                 .organizationId(orgId)
                 .connectionId(connectionId)
@@ -149,10 +162,21 @@ public class MessageIngestionService {
                 .senderName(senderName)
                 .subject(subject)
                 .sourceType(sourceType != null ? sourceType : "IMAP")
+                .jobId(decision.targetJobId())
                 .receivedAt(Instant.now())
-                .processingStatus("QUEUED")
+                .processingStatus("DISCOVERED")
+                .matchedRuleId(decision.matchedRuleId())
+                .ruleAction(decision.action())
+                .ruleExplanation(decision.explanation())
                 .build();
         messageRepo.save(message);
+
+        if (decision.status() == EmailRuleEngineService.EvaluationDecision.DecisionStatus.EXCLUDED) {
+            message.setProcessingStatus("FILTERED");
+            messageRepo.save(message);
+            log.info("Inbound mail message {} filtered out by rule '{}'", message.getId(), decision.matchedRuleName());
+            return null;
+        }
 
         InboundAttachment attachment = InboundAttachment.builder()
                 .organizationId(orgId)
@@ -167,6 +191,23 @@ public class MessageIngestionService {
                 .status("QUEUED")
                 .build();
         attachmentRepo.save(attachment);
+
+        if (decision.status() == EmailRuleEngineService.EvaluationDecision.DecisionStatus.REVIEW_REQUIRED) {
+            message.setProcessingStatus("REVIEW_REQUIRED");
+            messageRepo.save(message);
+            reviewCaseRepo.save(IdentityReviewCase.builder()
+                    .organizationId(orgId)
+                    .messageId(message.getId())
+                    .attachmentId(attachment.getId())
+                    .suggestedJobId(decision.targetJobId())
+                    .reasonCode("AMBIGUOUS_JOB_MAPPING")
+                    .details(decision.explanation())
+                    .build());
+        } else {
+            message.setProcessingStatus("QUEUED");
+            messageRepo.save(message);
+        }
+
         enqueueParseJob(orgId, attachment.getId());
         return attachment.getId();
     }
@@ -226,7 +267,7 @@ public class MessageIngestionService {
                 .sourceType(effectiveSourceType)
                 .jobId(jobId)
                 .receivedAt(Instant.now())
-                .processingStatus("QUEUED")
+                .processingStatus("DISCOVERED")
                 .build();
         messageRepo.save(message);
 
@@ -272,6 +313,10 @@ public class MessageIngestionService {
             enqueueParseJob(orgId, attachment.getId());
             accepted.add(attachment.getId());
         }
+
+        message.setProcessingStatus(!accepted.isEmpty() ? "QUEUED" : "EMPTY");
+        messageRepo.save(message);
+
         return new WebhookIngestResult(message.getId(), accepted);
     }
 
@@ -309,6 +354,11 @@ public class MessageIngestionService {
                         attachment.getMessageId(), orgId)
                 .orElseThrow(() -> new IllegalStateException(
                         "Inbound message not found: " + attachment.getMessageId()));
+        if (!"REVIEW_REQUIRED".equals(message.getProcessingStatus())) {
+            message.setProcessingStatus("PROCESSING");
+            messageRepo.save(message);
+        }
+
         String sourceType = message.getSourceType();
         String senderEmail = message.getSenderEmail();
 
@@ -318,6 +368,22 @@ public class MessageIngestionService {
                 senderEmail,
                 orgId,
                 resumeFile.getId());
+
+        boolean missingContact = (schema.getEmails() == null || schema.getEmails().isEmpty())
+                && (schema.getPhones() == null || schema.getPhones().isEmpty())
+                && (senderEmail == null || "FORWARDED".equalsIgnoreCase(sourceType));
+        if (missingContact) {
+            log.info("Missing contact info for attachment={} in message={}", attachment.getId(), message.getId());
+            reviewCaseRepo.save(IdentityReviewCase.builder()
+                    .organizationId(orgId)
+                    .messageId(message.getId())
+                    .attachmentId(attachment.getId())
+                    .reasonCode("MISSING_CONTACT_INFO")
+                    .details("Extracted resume contains no contact information (missing email and phone).")
+                    .build());
+            message.setProcessingStatus("REVIEW_REQUIRED");
+            messageRepo.save(message);
+        }
 
         Candidate candidate = identityService.resolveOrCreate(orgId, schema, senderEmail, sourceType);
 
@@ -424,14 +490,24 @@ public class MessageIngestionService {
         UUID reused = reuseExistingAttachment(orgId, resumeFile, jobId, sourceType);
         if (reused != null) return reused;
 
+        EmailRuleEngineService.MessageEnvelope env = new EmailRuleEngineService.MessageEnvelope(
+                orgId, null, null, senderEmail, null, subject, null,
+                List.of(new EmailRuleEngineService.AttachmentEnvelope(fname, mime, data.length))
+        );
+        EmailRuleEngineService.EvaluationDecision decision = ruleEngine.evaluate(env);
+        UUID effectiveJobId = jobId != null ? jobId : decision.targetJobId();
+
         InboundMessage message = InboundMessage.builder()
                 .organizationId(orgId)
                 .senderEmail(senderEmail)
                 .subject(subject)
                 .sourceType(sourceType != null ? sourceType : "UPLOAD")
-                .jobId(jobId)
+                .jobId(effectiveJobId)
                 .receivedAt(Instant.now())
-                .processingStatus("QUEUED")
+                .processingStatus("DISCOVERED")
+                .matchedRuleId(decision.matchedRuleId())
+                .ruleAction(decision.action())
+                .ruleExplanation(decision.explanation())
                 .build();
         messageRepo.save(message);
 
@@ -448,6 +524,23 @@ public class MessageIngestionService {
                 .status("QUEUED")
                 .build();
         attachmentRepo.save(attachment);
+
+        String postStatus = (jobId == null && decision.status() == EmailRuleEngineService.EvaluationDecision.DecisionStatus.REVIEW_REQUIRED)
+                ? "REVIEW_REQUIRED" : "QUEUED";
+        message.setProcessingStatus(postStatus);
+        messageRepo.save(message);
+
+        if ("REVIEW_REQUIRED".equals(postStatus)) {
+            reviewCaseRepo.save(IdentityReviewCase.builder()
+                    .organizationId(orgId)
+                    .messageId(message.getId())
+                    .attachmentId(attachment.getId())
+                    .suggestedJobId(decision.targetJobId())
+                    .reasonCode("AMBIGUOUS_JOB_MAPPING")
+                    .details(decision.explanation())
+                    .build());
+        }
+
         enqueueParseJob(orgId, attachment.getId());
         return attachment.getId();
     }
@@ -592,14 +685,35 @@ public class MessageIngestionService {
                 .build());
     }
 
-    private void updateMessageStatus(UUID messageId) {
+    public void updateMessageStatus(UUID messageId) {
         messageRepo.findById(messageId).ifPresent(message -> {
+            if ("REVIEW_REQUIRED".equals(message.getProcessingStatus())) {
+                return;
+            }
             long outstanding = attachmentRepo.countByMessageIdAndStatusIn(
                     messageId, ACTIVE_ATTACHMENT_STATUSES);
-            long total = attachmentRepo.findByMessageId(messageId).size();
-            message.setProcessingStatus(outstanding > 0
-                    ? "PROCESSING"
-                    : (total > 0 ? "PROCESSED" : "EMPTY"));
+            List<InboundAttachment> all = attachmentRepo.findByMessageId(messageId);
+            long total = all.size();
+            long rejected = all.stream().filter(a -> "REJECTED".equals(a.getStatus())).count();
+            long processed = all.stream().filter(a -> "PROCESSED".equals(a.getStatus())).count();
+            long failed = all.stream().filter(a -> "FAILED".equals(a.getStatus())).count();
+
+            if (outstanding > 0) {
+                message.setProcessingStatus("PROCESSING");
+            } else if (processed > 0) {
+                message.setProcessingStatus("COMPLETED");
+            } else if (rejected == total && total > 0) {
+                message.setProcessingStatus("REJECTED");
+            } else if (failed > 0 && (failed + rejected == total)) {
+                message.setProcessingStatus("FAILED");
+                if (message.getFailureCode() == null) {
+                    message.setFailureCode("ATTACHMENT_PROCESSING_FAILED");
+                }
+            } else if (total > 0) {
+                message.setProcessingStatus("COMPLETED");
+            } else {
+                message.setProcessingStatus("EMPTY");
+            }
             messageRepo.save(message);
         });
     }

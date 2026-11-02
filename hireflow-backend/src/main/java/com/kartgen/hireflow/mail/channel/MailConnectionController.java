@@ -33,6 +33,7 @@ public class MailConnectionController {
             "IMAP_APP_PASSWORD", "GMAIL_OAUTH", "MS_GRAPH_OAUTH");
 
     private final MailConnectionRepository connectionRepo;
+    private final List<MailSyncPort> syncPorts;
     private final UniversalImapSyncService imapSync;
     private final OAuthMailSyncAdapter oauthSync;
     private final HireFlowProperties props;
@@ -53,7 +54,9 @@ public class MailConnectionController {
 
     public record MailConnectionDto(
             UUID id, String provider, String mailboxAddress, String imapHost,
-            String folderFilter, String status, String lastSuccessAt, Instant createdAt
+            String folderFilter, String status, String lastSuccessAt, Instant createdAt,
+            Boolean initialSyncCompleted, Integer consecutiveFailures, String syncStatusDetails,
+            Instant lastAttemptAt
     ) {}
 
     @PostMapping
@@ -141,14 +144,17 @@ public class MailConnectionController {
                     "Connection is " + conn.getStatus() + " and must be reconnected first"));
         }
 
+        MailSyncPort adapter = syncPorts.stream()
+                .filter(p -> p.supports(conn.getProvider()))
+                .findFirst()
+                .orElse(null);
+
         SyncResult result;
-        switch (conn.getProvider()) {
-            case "IMAP_APP_PASSWORD" -> result = imapSync.syncConnection(conn);
-            case "GMAIL_OAUTH", "MS_GRAPH_OAUTH" -> result = oauthSync.syncConnection(conn);
-            default -> {
-                return ResponseEntity.badRequest().body(Map.of("error",
-                        "Cannot sync provider: " + conn.getProvider()));
-            }
+        if (adapter != null) {
+            result = adapter.syncConnection(conn);
+        } else {
+            return ResponseEntity.badRequest().body(Map.of("error",
+                    "Cannot sync provider: " + conn.getProvider()));
         }
 
         MailConnection refreshed = connectionRepo.findByIdAndOrganizationId(id, orgId)
@@ -162,6 +168,26 @@ public class MailConnectionController {
                 "error", result.errorMessage() != null ? result.errorMessage() : "",
                 "lastSuccessAt", refreshed.getLastSuccessAt() != null
                         ? refreshed.getLastSuccessAt().toString() : ""));
+    }
+
+    @GetMapping("/{id}/sync-status")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','RECRUITER','MANAGER')")
+    public ResponseEntity<?> getSyncStatus(@PathVariable UUID id) {
+        UUID orgId = TenantContext.getOrganizationId();
+        MailConnection conn = connectionRepo.findByIdAndOrganizationId(id, orgId)
+                .orElseThrow(() -> new NoSuchElementException("Connection not found: " + id));
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("connectionId", conn.getId());
+        resp.put("provider", conn.getProvider());
+        resp.put("status", conn.getStatus());
+        resp.put("syncCursor", conn.getSyncCursor());
+        resp.put("initialSyncCompleted", Boolean.TRUE.equals(conn.getInitialSyncCompleted()));
+        resp.put("consecutiveFailures", conn.getConsecutiveFailures() != null ? conn.getConsecutiveFailures() : 0);
+        resp.put("syncStatusDetails", conn.getSyncStatusDetails() != null ? conn.getSyncStatusDetails() : "");
+        resp.put("lastAttemptAt", conn.getLastAttemptAt() != null ? conn.getLastAttemptAt().toString() : null);
+        resp.put("lastSuccessAt", conn.getLastSuccessAt() != null ? conn.getLastSuccessAt().toString() : null);
+        return ResponseEntity.ok(resp);
     }
 
     @DeleteMapping("/{id}")
@@ -183,6 +209,8 @@ public class MailConnectionController {
         return new MailConnectionDto(c.getId(), c.getProvider(), c.getMailboxAddress(),
                 c.getImapHost(), c.getFolderFilter(), c.getStatus(),
                 c.getLastSuccessAt() != null ? c.getLastSuccessAt().toString() : null,
-                c.getCreatedAt());
+                c.getCreatedAt(),
+                c.getInitialSyncCompleted(), c.getConsecutiveFailures(),
+                c.getSyncStatusDetails(), c.getLastAttemptAt());
     }
 }

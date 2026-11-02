@@ -16,6 +16,10 @@ public interface InboundMessageRepository extends JpaRepository<InboundMessage, 
 
     Optional<InboundMessage> findByOrganizationIdAndConnectionIdAndProviderMessageId(
             UUID orgId, UUID connectionId, String providerMessageId);
+
+    List<InboundMessage> findByOrganizationIdOrderByCreatedAtDesc(UUID orgId);
+
+    List<InboundMessage> findByOrganizationIdAndProcessingStatusOrderByCreatedAtDesc(UUID orgId, String processingStatus);
 }
 
 

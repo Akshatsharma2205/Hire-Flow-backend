@@ -3,6 +3,7 @@ package com.kartgen.hireflow.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kartgen.hireflow.common.ApiError;
 import com.kartgen.hireflow.common.TenantContext;
+import com.kartgen.hireflow.observability.CorrelationIdFilter;
 import com.kartgen.hireflow.tenant.Organization;
 import com.kartgen.hireflow.tenant.OrganizationRepository;
 import com.kartgen.hireflow.tenant.OrganizationUserRepository;
@@ -14,6 +15,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
@@ -86,6 +88,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
         } finally {
             TenantContext.clear();
+            MDC.remove(CorrelationIdFilter.MDC_ORG_ID_KEY);
         }
     }
 
@@ -205,6 +208,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // Step 13: Establish TenantContext using verified IDs
         TenantContext.setOrganizationId(auth.organizationId());
         TenantContext.setUserId(auth.userId());
+        MDC.put(CorrelationIdFilter.MDC_ORG_ID_KEY, auth.organizationId().toString());
 
         // Step 14: Establish SecurityContext using authoritative database identity and validated role authority
         String authoritativeEmail = (auth.userEmail() != null && !auth.userEmail().isBlank())
@@ -240,5 +244,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private void clearContexts() {
         TenantContext.clear();
         SecurityContextHolder.clearContext();
+        MDC.remove(CorrelationIdFilter.MDC_ORG_ID_KEY);
     }
 }

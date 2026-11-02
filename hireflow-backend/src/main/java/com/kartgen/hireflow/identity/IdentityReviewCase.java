@@ -15,6 +15,9 @@ public class IdentityReviewCase {
     @Column(name = "reason_code", nullable = false, length = 50) private String reasonCode;
     @Column(columnDefinition = "TEXT") private String details;
     @Column(length = 50) private String resolution;
+    @Column(name = "message_id") private UUID messageId;
+    @Column(name = "attachment_id") private UUID attachmentId;
+    @Column(name = "suggested_job_id") private UUID suggestedJobId;
     @Column(name = "resolved_by") private UUID resolvedBy;
     @Column(name = "resolved_at") private Instant resolvedAt;
     @Column(name = "created_at", nullable = false, updatable = false) @Builder.Default private Instant createdAt = Instant.now();

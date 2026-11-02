@@ -25,7 +25,7 @@ import java.util.*;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class UniversalImapSyncService {
+public class UniversalImapSyncService implements MailSyncPort {
 
     private final MailConnectionRepository connectionRepo;
     private final MessageIngestionService ingestionService;
@@ -44,8 +44,15 @@ public class UniversalImapSyncService {
 
     public record AttachmentItem(String fileName, byte[] data) {}
 
+    @Override
+    public boolean supports(String provider) {
+        return "IMAP_APP_PASSWORD".equalsIgnoreCase(provider);
+    }
+
+    @Override
     public SyncResult syncConnection(MailConnection conn) {
-        if (!"IMAP_APP_PASSWORD".equals(conn.getProvider())) {
+        conn.setLastAttemptAt(Instant.now());
+        if (!"IMAP_APP_PASSWORD".equalsIgnoreCase(conn.getProvider())) {
             log.debug("Skipping non-IMAP connection: {}", conn.getId());
             return new SyncResult("ERROR", 0, 0, null, "Provider is not IMAP_APP_PASSWORD");
         }

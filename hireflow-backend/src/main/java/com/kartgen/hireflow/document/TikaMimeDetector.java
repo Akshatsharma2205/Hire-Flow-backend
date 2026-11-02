@@ -19,6 +19,9 @@ public class TikaMimeDetector {
     private final Tika tika = new Tika();
 
     public String detectMimeType(byte[] data, String fileName) {
+        if (data == null || data.length == 0) {
+            return "application/octet-stream";
+        }
         try {
             return tika.detect(data, fileName);
         } catch (Exception e) {

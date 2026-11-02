@@ -19,14 +19,27 @@
 
     <properties>
         <java.version>21</java.version>
-        <pdfbox.version>3.0.3</pdfbox.version>
-        <tika.version>2.9.2</tika.version>
+        <pdfbox.version>3.0.5</pdfbox.version>
+        <tika.version>3.2.2</tika.version>
+        <commons-lang3.version>3.17.0</commons-lang3.version>
         <jjwt.version>0.12.6</jjwt.version>
         <awssdk.version>2.25.16</awssdk.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>${commons-lang3.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-bom</artifactId>
+                <version>${tika.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>bom</artifactId>
