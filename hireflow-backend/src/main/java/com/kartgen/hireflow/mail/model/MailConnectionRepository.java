@@ -14,5 +14,8 @@ public interface MailConnectionRepository extends JpaRepository<MailConnection, 
 
     Optional<MailConnection> findByIdAndOrganizationId(UUID id, UUID orgId);
 
+    Optional<MailConnection> findByOrganizationIdAndProviderAndMailboxAddress(
+            UUID organizationId, String provider, String mailboxAddress);
+
     long countByOrganizationIdAndStatus(UUID orgId, String status);
 }

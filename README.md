@@ -12,6 +12,7 @@
 ## Key Features
 
 - **Multi-Channel Candidate Ingestion**:
+  - **Google & Microsoft OAuth 2.0 Mailboxes**: One-click Google Workspace (Gmail) and Microsoft 365 (Graph) mailbox connection with PKCE S256, single-use state token ledger, profile email auto-discovery, AES-256-GCM token encryption at rest, automatic token rotation during sync, and zero manual token entry in the UI.
   - **Browser Extension (Manifest V3)**: Real-time resume extraction from Gmail and Outlook with built-in invoice trap filters and SHA-256 duplicate pre-checks.
   - **Direct Recruiter Upload**: Drag-and-drop resume ingestion in the embedded web SPA.
   - **Inbound Forwarding Webhook**: Enterprise email webhook receiver with HMAC-SHA256 v2 signature verification and idempotency deduplication.
@@ -42,8 +43,8 @@
 | **Direct Upload** | Tab A / `handleFiles()` | `POST /api/v1/uploads/direct` | Bearer JWT (`OWNER`, `ADMIN`, `RECRUITER`) | Shows queued count badge, auto-refreshes candidate list | Displays red failure text and error toast | **VERIFIED** (`FrontendSpaEndToEndIntegrationTest`) |
 | **Pre-Flight Dedup** | Tab C / `testExtensionPreCheck()` | `POST /api/v1/uploads/check-hashes` | Bearer Extension Token | Displays whether file is duplicate or new | Displays error span with HTTP status | **VERIFIED** (`FrontendSpaEndToEndIntegrationTest`) |
 | **Extension Intake** | Tab C / `sendExtensionIntakeRequest()` | `POST /api/v1/uploads/extension-intake` | Bearer Extension Token | Updates inspector log with elapsed ms, polls candidate table | Renders rejected HTTP status code and details in log box | **VERIFIED** (`FrontendSpaEndToEndIntegrationTest`) |
-| **Mailbox Connect** | Tab B / `createMailConnection()` | `POST /api/v1/mail-connections` | Bearer JWT (`OWNER`, `ADMIN`) | Resets form, displays success toast, refreshes connections | Displays connection error toast | **VERIFIED** (`FrontendSpaEndToEndIntegrationTest`) |
-| **Mailbox Sync** | Tab B / `syncNow()` | `POST /api/v1/mail-connections/{id}/sync-now` | Bearer JWT (`OWNER`, `ADMIN`, `RECRUITER`, `MANAGER`) | Displays scanned and ingested counts in green alert card | Displays red alert card with failure diagnosis | **VERIFIED** (`IntakePipelineIntegrationTest`) |
+| **OAuth Connect** | Tab B / `connectOAuth(provider)` | `GET /api/v1/mail-connections/oauth/{provider}/authorize` | Bearer JWT (`OWNER`, `ADMIN`) | Opens centered popup; exchanges code on callback via postMessage bridge, auto-discovers email, refreshes connections | Displays error card / toast with provider failure details | **VERIFIED** (`OAuthMailConnectionE2ETest`, `OAuthMailControllerTest`) |
+| **Mailbox Sync** | Tab B / `syncNow(id)` | `POST /api/v1/mail-connections/{id}/sync-now` | Bearer JWT (`OWNER`, `ADMIN`, `RECRUITER`, `MANAGER`) | Ingests new attachments, updates sync cursor and last success timestamp | Displays `REAUTH` alert or error banner if credentials revoked | **VERIFIED** (`OAuthMailConnectionE2ETest`, `IntakePipelineIntegrationTest`) |
 | **List Jobs** | Requisition dropdown / `loadJobs()` | `GET /api/v1/jobs` | Bearer JWT | Populates `<select>` options for job filter and modal | Retains default "All Candidates" option | **VERIFIED** (`FrontendSpaEndToEndIntegrationTest`) |
 | **Create Job** | Modal / `createJob()` | `POST /api/v1/jobs` | Bearer JWT (`OWNER`, `ADMIN`, `RECRUITER`, `MANAGER`) | Closes modal, refreshes job selector, displays success toast | Displays error toast with validation details | **VERIFIED** (`JobControllerIntegrationTest`) |
 | **List Candidates**| Candidate Table / `loadCandidates()` | `GET /api/v1/candidates` | Bearer JWT | Renders table rows with skills, match %, version badges | Displays error row in table body | **VERIFIED** (`FrontendSpaEndToEndIntegrationTest`) |
@@ -84,7 +85,25 @@ Navigate to `http://localhost:8080/` in your browser. Default local development 
 - **Password**: `password123`
 - **Role**: `OWNER`
 
-### 4. Run Automated Tests
+### 4. Configure Google & Microsoft OAuth Mailbox Sync (Optional)
+To test live OAuth mailbox connections locally:
+1. Export provider client IDs and secrets:
+   ```bash
+   # Google Workspace / Gmail
+   export GOOGLE_OAUTH_CLIENT_ID="<your-google-client-id>.apps.googleusercontent.com"
+   export GOOGLE_OAUTH_CLIENT_SECRET="<your-google-client-secret>"
+
+   # Microsoft 365 / Outlook Graph
+   export MS_OAUTH_CLIENT_ID="<your-azure-app-client-id>"
+   export MS_OAUTH_CLIENT_SECRET="<your-azure-app-client-secret>"
+   export MS_OAUTH_TENANT="common"
+   ```
+2. In Google Cloud Console and Azure Portal, add redirect URIs:
+   `http://localhost:8080/api/v1/mail-connections/oauth/google/callback`
+   `http://localhost:8080/api/v1/mail-connections/oauth/microsoft/callback`
+3. Launch the app, navigate to **Tab B: Mailbox Connections**, and click **Connect Google Workspace** or **Connect Microsoft 365**.
+
+### 5. Run Automated Tests
 HireFlow includes a comprehensive verification suite:
 
 ```powershell
@@ -94,6 +113,9 @@ cd hireflow-backend
 
 # Run Chrome extension test suite (11 tests)
 node --test hireflow-extension/test/extension.test.js
+
+# Run frontend security test suite (5 tests)
+node --test hireflow-backend/src/test/javascript/frontend_security.test.js
 ```
 
 ---
@@ -105,13 +127,13 @@ Comprehensive technical documentation is maintained in the `docs/` directory:
 | Document | Description |
 |---|---|
 | [**Engineering Rules**](docs/AGENT_GUIDE.md) | Authoritative HireFlow Engineering Rules (Sections 1-16) |
-| [**Architecture Guide**](docs/ARCHITECTURE.md) | Modular monolith topology, bounded contexts, transaction atomicity |
-| [**REST API Reference**](docs/API_REFERENCE.md) | Complete catalog of all 13 controllers, routes, request/response contracts |
-| [**Database & Schema**](docs/DATABASE.md) | 29 JPA entities, table schemas, Flyway migrations V1-V4, relationship matrix |
+| [**Architecture Guide**](docs/ARCHITECTURE.md) | Modular monolith topology, bounded contexts, OAuth 2.0 flow with PKCE, transaction atomicity |
+| [**REST API Reference**](docs/API_REFERENCE.md) | Complete catalog of controllers, OAuth authorization & callback routes, request/response contracts |
+| [**Database & Schema**](docs/DATABASE.md) | 30 JPA entities, table schemas, Flyway migrations V1-V5, relationship matrix |
 | [**Java Class Reference**](docs/CLASS_REFERENCE.md) | Comprehensive class listing by package with single responsibilities |
-| [**Security Architecture**](docs/SECURITY.md) | HMAC v2 signatures, timing attack defense, tenant isolation, production guards |
-| [**Testing Guide**](docs/TESTING.md) | Test layers, failure-injection tests, MockMvc tests, execution commands |
-| [**Production Deployment**](docs/DEPLOYMENT.md) | Production deployment guide, environment variables, PostgreSQL setup |
+| [**Security Architecture**](docs/SECURITY.md) | HMAC v2 signatures, OAuth state entropy, AES-256-GCM token encryption, tenant isolation, production guards |
+| [**Testing Guide**](docs/TESTING.md) | 4-tier OAuth test architecture, failure-injection tests, MockMvc tests, execution commands |
+| [**Production Deployment**](docs/DEPLOYMENT.md) | Production deployment guide, OAuth configuration, Google CASA Tier 2 assessment, PostgreSQL setup |
 | [**Operations & Observability**](docs/OPERATIONS.md) | Operations runbooks, actuator health probes, queue health, disaster recovery |
 | [**Chrome Extension**](docs/EXTENSION.md) | Manifest V3 architecture, permissions, privacy gatekeeper, setup guide |
 | [**Final Verification Report**](docs/FINAL_VERIFICATION_REPORT.md) | Deep test logs, live runtime evidence, unverified aspects ledger |

@@ -354,8 +354,12 @@ public class OAuthMailSyncAdapter {
                 ? refreshGoogleToken(credentials.refreshToken())
                 : refreshMicrosoftToken(credentials.refreshToken());
 
+        String effectiveRefreshToken = (refreshed.refreshToken() != null && !refreshed.refreshToken().isBlank())
+                ? refreshed.refreshToken()
+                : credentials.refreshToken();
+
         Credentials updated = new Credentials(refreshed.accessToken(),
-                credentials.refreshToken(), refreshed.expiresAt());
+                effectiveRefreshToken, refreshed.expiresAt());
         storeCredentials(conn, updated);
         return refreshed.accessToken();
     }
@@ -370,7 +374,7 @@ public class OAuthMailSyncAdapter {
     }
 
     private record Credentials(String accessToken, String refreshToken, long expiresAt) {}
-    private record TokenResponse(String accessToken, long expiresAt) {}
+    private record TokenResponse(String accessToken, String refreshToken, long expiresAt) {}
 
     private Credentials readCredentials(MailConnection conn) {
         if (conn.getOauthSecretRef() == null || conn.getOauthSecretRef().isBlank()) {
@@ -453,9 +457,10 @@ public class OAuthMailSyncAdapter {
             if (accessToken == null) {
                 throw new IllegalStateException("Token endpoint returned no access_token");
             }
+            String newRefreshToken = node.path("refresh_token").asText(null);
             long expiresIn = node.path("expires_in").asLong(3600);
             long ttl = expiresIn;
-            return new TokenResponse(accessToken,
+            return new TokenResponse(accessToken, newRefreshToken,
                     Instant.now().plusSeconds(ttl).toEpochMilli());
         } catch (Exception e) {
             throw new IllegalStateException("Unable to parse OAuth token response", e);

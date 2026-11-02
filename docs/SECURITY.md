@@ -53,13 +53,70 @@ HireFlow employs three distinct authentication protocols tailored to specific ca
 | **Webhook Secrets** | `WebhookCredentialController` | 32 bytes (256 bits) `SecureRandom` (`hf_sec_...`) | SHA-256 hash in `webhook_credentials.secret_hash` | Displayed once at provisioning time; never logged | Revocable via key deactivation in DB; new keys provisioned via `POST /api/v1/webhook-credentials` |
 | **Extension Tokens** | `AuthController.generateExtensionToken` | 24 bytes (192 bits) `SecureRandom` | SHA-256 hash in `organization_users.extension_token_hash` | Returned in API response; cached locally in browser extension `chrome.storage.local` | Re-generated anytime via `POST /api/v1/auth/extension-token`, overwriting previous hash |
 | **Document View Tokens** | `LocalDiskStorageAdapter` | 256-bit HMAC-SHA256 over `{objectKey}:{expiry}` | URL parameter: `base64url(payload).hmacHex` | Embedded in short-lived URL (TTL: 3600 seconds) | Automatically expires past TTL (returns HTTP 410 Gone); cannot be forged without server storage secret |
-| **Mailbox Secrets** | `MailConnectionController` | User-supplied IMAP App Password or OAuth Refresh Token | AES-256-GCM encrypted in `mail_connections.oauth_secret_ref` | Never displayed; masked as `***` in API responses | User can delete or pause connection anytime |
+| **Mailbox Secrets & OAuth Tokens** | `OAuthMailController` & `MailConnectionController` | User-supplied IMAP App Password or OAuth Refresh/Access Tokens | AES-256-GCM encrypted in `mail_connections.oauth_secret_ref` | Never displayed; omitted entirely from `MailConnectionDto` | Reauthorization, deletion, or token rotation during sync |
+| **OAuth State Tokens** | `OAuthMailController` | 32 bytes (256 bits) `SecureRandom` | URL-safe Base64 in `oauth_authorization_attempts.state_token` | Sent in authorize response; logged only as 8-char prefix | Single-use atomic SQL consumption; 10-minute TTL |
+| **OAuth PKCE Verifiers** | `OAuthMailController` | 64 bytes (512 bits) `SecureRandom` | Stored in `oauth_authorization_attempts.code_verifier` | Never exposed to client or logged | Single-use; consumed during token exchange |
 | **JWT Signing Key** | `HireFlowProperties.jwt.secret` | >= 256 bits HMAC secret key | Environment variable `${JWT_SECRET}` | Never exposed over HTTP or in logs | Rotated via configuration update |
 | **Master Crypto Key** | `HireFlowProperties.crypto.secret-key` | 256 bits (64 hex characters) | Environment variable `${CRYPTO_SECRET_KEY}` | Never exposed over HTTP or in logs | Rotated via configuration update |
 
 ---
 
-## 4. Multi-Tenant Data Isolation
+## 4. OAuth 2.0 Mailbox Security Architecture
+
+HireFlow applies strict defense-in-depth security to the Google Gmail and Microsoft 365 OAuth 2.0 integration:
+
+### 4.1 AES-256-GCM Credential Encryption at Rest (`CryptoUtil`)
+All OAuth credentials (access tokens, refresh tokens, token expiration epochs) are encrypted before writing to `mail_connections.oauth_secret_ref`:
+- **Algorithm**: `AES/GCM/NoPadding` (authenticated symmetric encryption).
+- **Key**: 256-bit AES master key supplied via `hireflow.crypto.secret-key` / `CRYPTO_SECRET_KEY` (must be exactly 64 hexadecimal characters).
+- **IV & Auth Tag**: A unique 12-byte initialization vector (`IV`) is generated for every encryption using `java.security.SecureRandom`. A 128-bit authentication tag (`TAG_BITS=128`) protects ciphertext integrity and authenticity.
+- **Output**: The 12-byte IV is prepended to the ciphertext, Base64-encoded, and stored in the database. Decryption verifies the authentication tag before returning the decrypted plaintext.
+- **Plaintext Ban**: Neither access tokens nor refresh tokens are ever stored unencrypted in the database.
+
+### 4.2 Single-Use State Token Entropy & Atomic Consumption
+To prevent Cross-Site Request Forgery (CSRF) and OAuth state fixation:
+- **Entropy**: 32 cryptographically random bytes (256 bits of entropy) are generated via `SecureRandom` and encoded using URL-safe Base64 without padding.
+- **Atomic Replay Prevention**:
+  State consumption is executed through an atomic SQL update:
+  ```sql
+  UPDATE oauth_authorization_attempts a
+  SET a.status = 'CONSUMED', a.consumed_at = :now
+  WHERE (a.state_token = :token OR a.state = :token)
+    AND a.status = 'PENDING'
+    AND a.expires_at > :now
+  ```
+  - Exactly one callback execution can transition the attempt to `CONSUMED`.
+  - Concurrent or replayed callbacks receive `updatedRows == 0`, immediately halting token exchange.
+- **Time-to-Live (TTL)**: Authorization attempts expire strictly after 10 minutes (`expires_at = created_at + 10m`). Expired attempts cannot be claimed.
+
+### 4.3 Multi-Tenant State & Connection Isolation
+- **Tenant Context Binding**: When `/authorize` is called, the attempt record is explicitly stamped with `organization_id` and `user_id` from the caller's authenticated `TenantContext`.
+- **Callback Enforcement**: When the provider callback completes token exchange, the mailbox connection is upserted strictly using `attempt.getOrganizationId()`. No provider callback parameter or foreign tenant context can redirect a connected mailbox into another organization.
+
+### 4.4 Bidirectional Origin Validation for PostMessage Bridge
+To ensure that authorization codes and connection events cannot be intercepted by malicious origins or malicious parent windows:
+- **Server Bridge**: The callback HTML page sends the message strictly to `window.location.origin`:
+  `window.opener.postMessage(message, window.location.origin);`
+  It never uses the wildcard `*` target origin.
+- **Client Listener**: The SPA event listener verifies:
+  `if (event.origin !== window.location.origin) return;`
+  `if (!event.data || event.data.type !== 'HIREFLOW_OAUTH_CALLBACK') return;`
+- Messages from foreign origins, subdomains, or unexpected formats are immediately discarded.
+
+### 4.5 Multi-Context XSS Escaping
+Dynamic data rendered in the OAuth callback response is escaped across multiple security contexts:
+- **HTML Markup Context**: Values interpolated into HTML elements (such as `mailboxAddress`, `provider`, or `errorMessage`) are escaped with `HtmlUtils.htmlEscape()`, neutralizing `<script>`, `<img>`, `<iframe>`, and tag break-out payloads.
+- **JavaScript Context**: Values interpolated into the inline `<script>` block are passed through `escapeJs()`, escaping backslashes, single quotes, double quotes, newlines, carriage returns, and `</` to prevent closing `</script>` tags from breaking out of the script block.
+- **Frontend SPA**: The SPA applies strict HTML entity escaping (`esc()`) on all dynamic candidate/mailbox text and uses `safeUrl()` to block `javascript:`, `data:`, and `vbscript:` pseudo-protocol URLs.
+
+### 4.6 Zero Token Exposure Guarantee
+- **Log Hygiene**: Authorization codes, client secrets, access tokens, and refresh tokens are strictly omitted from application logs. Log events record only provider, organization UUID, user UUID, and truncated state prefix (first 8 characters).
+- **API Hygiene**: `MailConnectionDto` contains zero secret fields (`oauthSecretRef`, `refreshToken`, and `accessToken` are never serialized or returned).
+- **DOM & Client Storage Hygiene**: The frontend SPA never stores tokens or secrets in DOM attributes, `localStorage`, or `sessionStorage`.
+
+---
+
+## 5. Multi-Tenant Data Isolation
 
 - **Tenant Scoping**: Every database entity (candidates, jobs, resumes, applications, messages) contains a non-nullable `organization_id` foreign key.
 - **Context Holder**: `TenantContext` binds tenant identity to the executing request thread via `ThreadLocal`.
@@ -68,7 +125,7 @@ HireFlow employs three distinct authentication protocols tailored to specific ca
 
 ---
 
-## 5. Storage Safety & Rollback (J-2B Guarantees)
+## 6. Storage Safety & Rollback (J-2B Guarantees)
 
 Physical file storage operations coordinate atomically with database transaction boundaries:
 - Files are staged and stored prior to database transaction commitment.
@@ -79,7 +136,7 @@ Physical file storage operations coordinate atomically with database transaction
 
 ---
 
-## 6. Production Hardening & Startup Guards
+## 7. Production Hardening & Startup Guards
 
 HireFlow enforces strict startup safety across three complementary components:
 
@@ -103,17 +160,17 @@ HireFlow enforces strict startup safety across three complementary components:
 
 ---
 
-## 7. Zero-Secret Git Hygiene
+## 8. Zero-Secret Git Hygiene
 
 No production credentials, private keys, database passwords, or secret tokens are committed to source control. Configuration files rely on environment variable substitutions (`${DB_HOST}`, `${DB_PORT}`, `${DB_NAME}`, `${DB_PASSWORD}`, `${JWT_SECRET}`, `${CRYPTO_SECRET_KEY}`, `${S3_BUCKET}`, `${AI_API_KEY}`).
 
 ---
 
-## 8. Continuous Integration (CI) Security Gates & Automated Pipeline Hygiene
+## 9. Continuous Integration (CI) Security Gates & Automated Pipeline Hygiene
 
 Automated verification is executed on every push and pull request to `main` via `.github/workflows/ci.yml`.
 
-### 8.1 Implemented CI Gates
+### 9.1 Implemented CI Gates
 1. **Backend Compilation & Test Gate (`backend-test`)**:
    - Compiles Java 21 codebase under Temurin JDK 21.
    - Executes all 31 test suites (282 tests) against in-memory H2 (`MODE=PostgreSQL`).
@@ -130,7 +187,7 @@ Automated verification is executed on every push and pull request to `main` via 
      *Note*: Any pattern match causes immediate build failure (`exit 1`).
    - **Documentation Completeness**: Enforces presence of 14 required engineering documents.
 
-### 8.2 Tracked Unfinished Work Ledger (Future Security Enhancements)
+### 9.2 Tracked Unfinished Work Ledger (Future Security Enhancements)
 To maintain strict technical honesty and audit transparency, the following capabilities are explicitly classified as **UNFINISHED WORK**:
 
 1. **PostgreSQL Testing in CI**:

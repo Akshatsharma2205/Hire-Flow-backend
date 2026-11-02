@@ -66,6 +66,57 @@ HireFlow AI enforces rigorous automated testing covering all architectural layer
 - `FrontendSpaEndToEndIntegrationTest` (1 test):
   Real end-to-end integration test covering the complete Single Page Application user journey: static HTML delivery, auto-login, KPI queries, extension token generation, SHA-256 pre-flight checks, direct upload, candidate table pagination, candidate drawer, application creation, stage update to `SCREENING`, signed HMAC URL generation, and inline document byte streaming.
 
+### 2.7 Google & Microsoft OAuth 2.0 Mailbox Testing Catalog (4-Tier Test Architecture)
+
+HireFlow enforces a comprehensive 4-tier test architecture for Google Gmail and Microsoft 365 OAuth 2.0 mailbox connectivity, covering unit logic, end-to-end workflows with mocked providers, adversarial security stress tests, and frontend postMessage security:
+
+#### 1. Unit & Mock Testing (`com.kartgen.hireflow.mail.channel.OAuthMailControllerTest` — 14 tests)
+- **Initiation Flow**: Validates `/authorize` for Google (consent prompt, offline access, required scopes) and Microsoft (PKCE S256 verifier/challenge generation, scope resolution, tenant template substitution).
+- **Configuration Guards**: Verifies immediate `400 Bad Request` if provider client ID is unconfigured or provider is unsupported.
+- **Provider Errors & Cancellation**: Verifies `access_denied` user cancellation, marking attempt `FAILED` in the database, and rendering clean error HTML without leaking internal details.
+- **State Validation & Replay**: Verifies rejection of missing state, non-existent state, expired state, replayed state (`CONSUMED`), and provider mismatches.
+- **Token Exchange & Identity**: Tests server-side code exchange, JSON response parsing, mailbox address resolution (`users/me/profile` and `/me`), and AES-256-GCM credential encryption.
+- **XSS & Output Escaping**: Verifies `HtmlUtils.htmlEscape` and `escapeJs` preventing script injection in callback HTML.
+
+#### 2. End-to-End Workflow Testing (`com.kartgen.hireflow.mail.channel.OAuthMailConnectionE2ETest` — 23 tests across Tiers 1–4)
+- **Tier 1 (Happy Paths & Connection Lifecycle)**:
+  - Full Google Workspace connection with auto-discovered Gmail address and postMessage bridge event.
+  - Full Microsoft 365 connection with PKCE verification and profile auto-discovery.
+  - Verification that new connections appear in `GET /api/v1/mail-connections` with status `ACTIVE` and zero token leakage.
+- **Tier 2 (Boundary Values & Provider Failure Modes)**:
+  - Handling of provider token exchange HTTP 400 and HTTP 500 error payloads.
+  - Provider cancellation (`error=access_denied`) rendering user-friendly cancellation banner.
+  - State token expiry exactly at 10-minute boundary.
+- **Tier 3 (Pairwise & Reauthorization State Transitions)**:
+  - Google re-authorization when `refresh_token` is omitted in response: verifies backend decrypts existing credentials and preserves the valid refresh token.
+  - Automatic token refresh during mailbox synchronization in `OAuthMailSyncAdapter.syncConnection`.
+  - Cursor advancement for Gmail history ID and Microsoft Graph delta tokens.
+- **Tier 4 (Multi-Tenant Isolation & Zero Token Leakage)**:
+  - Cross-tenant callback rejection: verifying state initiated by Organization A cannot create or bind a connection in Organization B.
+  - Connection pausing (`DELETE /api/v1/mail-connections/{id}`).
+  - DTO schema assertion confirming zero plaintext tokens or secrets in API responses.
+
+#### 3. Stress & Concurrency Security Testing (`com.kartgen.hireflow.mail.channel.OAuthSecurityStressTest` — 17 tests)
+- **Concurrent Replay Race Attacks**: Executes 10 concurrent threads attempting to consume the same state token; asserts that exactly 1 thread succeeds (atomic row update) and all 9 concurrent threads fail.
+- **State Expiration Boundary Conditions**: Verifies state acceptance at `expiresAt - 1s` and rejection at `expiresAt + 1s`.
+- **Entropy & Unpredictability**: Validates 256 bits of entropy across 1000 generated state tokens with zero collisions.
+- **Concurrent Token Refresh**: Validates thread-safe token refresh under concurrent synchronization jobs.
+
+#### 4. Challenger & Adversarial Security Testing (`com.kartgen.hireflow.mail.channel.OAuthSecurityChallengerTest` — 10 tests)
+- **Adversarial Input Fuzzing**: Tests SQL injection strings in state/code parameters, Unicode null bytes, and oversized payloads.
+- **XSS Payload Defense**: Tests `<script>alert(1)</script>`, `"><img src=x onerror=...>`, and SVG onload payloads in provider error descriptions and mailbox strings.
+- **Forged Profile Payloads**: Verifies rejection of missing email addresses, invalid emails lacking `@`, and corrupted token JSON envelopes.
+
+#### 5. Frontend PostMessage Security Testing (`frontend_security.test.js` — 5 tests)
+- **Static DOM Analysis**: Confirms zero manual token input elements (`#refreshToken`, `#accessToken`), zero client secrets, and zero `localStorage`/`sessionStorage` usage in `index.html`.
+- **Origin Validation**: Proves that the postMessage event listener strictly rejects cross-origin attacker injection (`https://attacker.evil.com`), subdomain spoofing (`https://hireflow.company.com.attacker.com`), and malformed message types.
+- **Popup Blocker Fallback**: Verifies that when `window.open` returns `null`, the frontend immediately falls back to full-window redirect.
+- **History Sanitization**: Verifies that redirect query parameters (`?oauth=success...`) are scrubbed from browser history using `history.replaceState`.
+- **DOM XSS Sanitization**: Validates entity escaping (`esc`) and `safeUrl` protocol checks rejecting `javascript:`, `data:`, and `vbscript:`.
+
+#### 6. Browser Extension Security Testing (`hireflow-extension/test/extension.test.js` — 11 tests)
+- Tests magic byte inspection (PDF, DOCX), non-resume rejection, privacy gatekeeper blocking of tax invoices and receipts, Base64 roundtrip conversion, file extension support, and smart candidate scoring.
+
 ---
 
 ## 3. Running Backend Tests Locally
@@ -79,12 +130,27 @@ cd hireflow-backend
 # Linux / macOS
 ./mvnw test
 ```
-*Expected Execution Time*: ~1m 15s. All 282 tests pass with 0 failures, 0 errors, 0 skipped.
+*Expected Execution Time*: ~1m 30s. All test suites pass with 0 failures, 0 errors, 0 skipped.
 
-### Run an Individual Test Suite:
+### Run OAuth Test Suites:
 ```powershell
 cd hireflow-backend
-.\mvnw.cmd test -Dtest=FrontendSpaEndToEndIntegrationTest
+# Unit tests
+.\mvnw.cmd test -Dtest=OAuthMailControllerTest
+
+# End-to-end integration tests
+.\mvnw.cmd test -Dtest=OAuthMailConnectionE2ETest
+
+# Security stress and concurrency tests
+.\mvnw.cmd test -Dtest=OAuthSecurityStressTest
+
+# Security challenger tests
+.\mvnw.cmd test -Dtest=OAuthSecurityChallengerTest
+```
+
+### Run Frontend Security Tests:
+```powershell
+node --test hireflow-backend/src/test/javascript/frontend_security.test.js
 ```
 
 ### Run Webhook Security Tests:

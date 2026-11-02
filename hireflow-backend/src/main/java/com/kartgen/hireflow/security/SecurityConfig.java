@@ -67,6 +67,7 @@ public class SecurityConfig {
                 auth.requestMatchers("/api/v1/auth/**").permitAll();
                 auth.requestMatchers("/api/v1/local-s3/**").permitAll();
                 auth.requestMatchers("/api/v1/mail-webhook/**").permitAll(); // WebhookAuthFilter enforces secret
+                auth.requestMatchers("/api/v1/mail-connections/oauth/*/callback").permitAll();
                 auth.requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll();
                 if (h2ConsoleEnabled) {
                     auth.requestMatchers("/h2-console/**").permitAll();

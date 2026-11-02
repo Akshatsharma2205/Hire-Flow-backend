@@ -60,6 +60,11 @@ The backend application (`hireflow-backend/src/main/java/com/kartgen/hireflow`) 
   - `ForwardingWebhookController` (`/api/v1/mail-webhook/inbound`): Receives inbound email forwarding payloads with signature validation and deduplication.
   - `DirectUploadController` (`/api/v1/uploads/direct`): Allows recruiters to upload candidate resumes directly.
   - `ExtensionIntakeController` (`/api/v1/uploads/extension-intake`): Handles candidate captures streamed from the Chrome extension with SHA-256 pre-flight hash verification (`/api/v1/uploads/check-hashes`).
+  - `OAuthMailController` (`/api/v1/mail-connections/oauth`): Handles OAuth 2.0 authorization initiation (`/{provider}/authorize`) and provider callbacks (`/{provider}/callback`) for Google Gmail and Microsoft 365.
+  - `MailConnectionController` (`/api/v1/mail-connections`): Manages mailbox connection lifecycle (listing, manual sync trigger, pause/deletion) with zero secret leakage.
+- Core Sync Adapters:
+  - `OAuthMailSyncAdapter`: Manages background and on-demand synchronization for `GMAIL_OAUTH` and `MS_GRAPH_OAUTH` mailboxes, cursor management (Gmail history ID / MS Graph delta tokens), attachment extraction, and automatic token refresh/rotation.
+  - `UniversalImapSyncService`: Connects to standard IMAP mailboxes using encrypted app passwords.
 - `MessageIngestionService`: Orchestrates atomic persistence of raw messages, extraction of attachments, SHA-256 checksum computation, file storage synchronization, and asynchronous job queuing.
 
 ### 2.4 `document`
@@ -107,7 +112,117 @@ The backend application (`hireflow-backend/src/main/java/com/kartgen/hireflow`) 
 
 ---
 
-## 3. Storage & Transaction Safety (J-2B Architecture)
+## 3. Google & Microsoft OAuth 2.0 Mailbox Integration Architecture
+
+HireFlow implements a secure, server-orchestrated OAuth 2.0 authorization-code flow with PKCE that eliminates manual credential provisioning and prevents secret leakage to frontend browser environments.
+
+```
+Recruiter Browser (SPA)               HireFlow Backend                      OAuth Provider (Google/MS)
+      │                                      │                                          │
+      │ 1. GET /oauth/{provider}/authorize   │                                          │
+      ├─────────────────────────────────────>│                                          │
+      │                                      │ 2. Generate 32B state token              │
+      │                                      │    Generate PKCE S256 (Microsoft)        │
+      │                                      │    Persist OAuthAuthorizationAttempt     │
+      │ 3. 200 OK (authUrl, stateToken)      │                                          │
+      │<─────────────────────────────────────┤                                          │
+      │                                                                                 │
+      │ 4. Open Popup window with authUrl                                               │
+      ├────────────────────────────────────────────────────────────────────────────────>│
+      │                                      │ 5. User signs in & grants consent        │
+      │ 6. Redirect to /oauth/{prov}/callback│<─────────────────────────────────────────┤
+      ├─────────────────────────────────────>│                                          │
+      │                                      │ 7. Atomic SQL Claim (consumePending)     │
+      │                                      │    - Replay check, TTL check             │
+      │                                      │ 8. Server-side token exchange (POST)     ├────────┐
+      │                                      │<─────────────────────────────────────────┴────────┘
+      │                                      │ 9. Profile discovery (fetch mailbox email)
+      │                                      │ 10. Refresh token preservation check     │
+      │                                      │ 11. AES-256-GCM credential encryption    │
+      │                                      │ 12. Upsert MailConnection entity         │
+      │ 13. Render HTML postMessage bridge   │                                          │
+      │<─────────────────────────────────────┤                                          │
+      │                                                                                 │
+      │ 14. postMessage({ type: 'HIREFLOW_OAUTH_CALLBACK', status: 'SUCCESS' }, origin) │
+      │ 15. Popup window.close(); SPA reloads mailbox list & displays success toast     │
+```
+
+### 3.1 Authorization-Code Flow with PKCE S256
+- **Initiation (`GET /api/v1/mail-connections/oauth/{provider}/authorize`)**:
+  - Enforces `OWNER` or `ADMIN` RBAC authorization via Bearer JWT.
+  - Dynamically constructs the provider authorization URL with required parameters:
+    - **Google Workspace**: `access_type=offline`, `prompt=consent`, `response_type=code`, `scope=https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email`.
+    - **Microsoft 365**: `response_type=code`, `response_mode=query`, `scope=offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read`, `prompt=select_account`.
+  - **PKCE S256 (RFC 7636)**: For Microsoft flows, the backend generates a 64-byte `SecureRandom` verifier, computes the SHA-256 digest, URL-safe Base64 encodes it as the `code_challenge`, and passes `code_challenge_method=S256`. The verifier is securely persisted in the backend state attempt.
+
+### 3.2 Single-Use State Token Ledger (`OAuthAuthorizationAttempt`)
+- **State Token Entropy**: 32 cryptographically random bytes generated via `SecureRandom` encoded as URL-safe Base64 without padding (256 bits of entropy).
+- **Tenant & User Binding**: Each authorization attempt is bound to the initiating `organization_id`, `user_id`, provider, and dynamically resolved `redirect_uri`.
+- **10-Minute TTL**: State tokens expire 10 minutes after generation.
+- **Atomic Replay Prevention**:
+  Upon provider callback, the backend executes an atomic SQL conditional update:
+  ```sql
+  UPDATE oauth_authorization_attempts a
+  SET a.status = 'CONSUMED', a.consumed_at = :now
+  WHERE (a.state_token = :token OR a.state = :token)
+    AND a.status = 'PENDING'
+    AND a.expires_at > :now
+  ```
+  - Exactly one execution can transition the attempt from `PENDING` to `CONSUMED`.
+  - Concurrent requests or replay attempts update 0 rows, fail immediately, and return an explicit replay error without contacting the provider.
+
+### 3.3 Mailbox Identity Auto-Discovery
+Recruiters never type or configure mailbox email addresses manually. Once the authorization code is exchanged for an access token, the backend queries the provider identity API:
+- **Google**: Calls `GET https://gmail.googleapis.com/gmail/v1/users/me/profile`, extracting `emailAddress`.
+- **Microsoft**: Calls `GET https://graph.microsoft.com/v1.0/me`, extracting `mail` (or falling back to `userPrincipalName`).
+The discovered email address is normalized to lowercase and used as the authoritative identity for the `MailConnection`.
+
+### 3.4 Refresh Token Preservation on Reauthorization
+Google OAuth does not re-issue a `refresh_token` on subsequent authorization flows unless forced with re-consent. If an existing mailbox connection is reauthorized and Google's token response omits `refresh_token`:
+1. The backend inspects `mail_connections` for an existing connection matching `(organization_id, provider, mailbox_address)`.
+2. If present, it decrypts the existing `oauth_secret_ref` using `CryptoUtil` (AES-256-GCM).
+3. If an existing valid `refreshToken` is found, the backend preserves it alongside the newly issued `accessToken` and updated expiry timestamp.
+4. Prevents connection invalidation during routine reauthorization.
+
+### 3.5 Token Rotation During Mailbox Synchronization
+In `OAuthMailSyncAdapter`:
+- Before invoking provider APIs, the adapter checks whether the stored access token is expired or within 60 seconds of expiration.
+- If expired, it triggers a refresh using the stored refresh token:
+  - Google: `POST https://oauth2.googleapis.com/token` (`grant_type=refresh_token`).
+  - Microsoft: `POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` (`grant_type=refresh_token`).
+- When the provider issues a rotated refresh token in the response (`newRefreshToken != null`), `OAuthMailSyncAdapter` immediately re-encrypts the new token tuple and commits it to `mail_connections.oauth_secret_ref`, ensuring zero credential desynchronization.
+
+### 3.6 HTML PostMessage Bridge & Fallback Redirect
+- **Popup Window Flow**:
+  1. The SPA opens a centered popup window pointing to the provider's `authorizationUrl`.
+  2. The callback endpoint returns a clean HTML page containing a client bridge script:
+     ```javascript
+     const message = {
+         type: 'HIREFLOW_OAUTH_CALLBACK',
+         status: 'SUCCESS',
+         provider: 'google',
+         mailboxAddress: 'hr@company.com'
+     };
+     if (window.opener) {
+         window.opener.postMessage(message, window.location.origin);
+         setTimeout(() => window.close(), 1000);
+     } else {
+         window.location.href = '/index.html?oauth=success&provider=' + encodeURIComponent('google') + '&mailbox=' + encodeURIComponent('hr@company.com');
+     }
+     ```
+  3. **Bidirectional Origin Validation**:
+     - The callback script targets `window.location.origin`, preventing cross-origin token leaks.
+     - The SPA listener strictly enforces:
+       `if (event.origin !== window.location.origin) return;`
+       `if (!event.data || event.data.type !== 'HIREFLOW_OAUTH_CALLBACK') return;`
+  4. **Popup Blocker Fallback**:
+     - If the browser blocks popups, the SPA falls back to a full-window redirect.
+     - Upon callback, the user is redirected to `/index.html?oauth=success...`.
+     - The SPA processes the result and immediately invokes `window.history.replaceState({}, document.title, cleanUrl)` to scrub query parameters from browser history.
+
+---
+
+## 4. Storage & Transaction Safety (J-2B Architecture)
 
 A critical architectural guarantee of HireFlow is **Storage-to-Database Atomicity**:
 1. During file ingestion, files are persisted to physical storage prior to database transaction commitment.
@@ -117,9 +232,9 @@ A critical architectural guarantee of HireFlow is **Storage-to-Database Atomicit
 
 ---
 
-## 4. Frontend Single Page Application (SPA)
+## 5. Frontend Single Page Application (SPA)
 
 HireFlow features an integrated, responsive Single Page Application embedded directly inside `hireflow-backend/src/main/resources/static/index.html`.
 - Styled with modern Tailwind CSS utilities and clean typography.
 - Communicates with all backend REST endpoints via standard JSON fetch calls.
-- Provides real-time dashboard analytics, candidate profile views, job requisition editors, application stage kanban boards, and interactive resume PDF previewers.
+- Provides real-time dashboard analytics, candidate profile views, job requisition editors, application stage kanban boards, interactive resume PDF previewers, and one-click Google & Microsoft OAuth mailbox connections.

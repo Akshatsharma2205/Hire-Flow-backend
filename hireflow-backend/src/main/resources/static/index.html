@@ -117,49 +117,136 @@
 
         <!-- Tab B: Connect Mailbox -->
         <div id="panel-email" class="p-5 hidden">
-            <form id="emailForm" onsubmit="createMailConnection(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+            <!-- Header -->
+            <div class="mb-5 flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 pb-4">
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Provider</label>
-                    <select id="emailProvider" onchange="autoFillImap()" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
-                        <option value="IMAP_APP_PASSWORD">IMAP (App Password)</option>
-                        <option value="GMAIL_OAUTH">Gmail OAuth</option>
-                        <option value="MS_GRAPH_OAUTH">Outlook/MS Graph OAuth</option>
-                    </select>
+                    <h3 class="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                        <span>📧 Connect Inbound Hiring Mailbox</span>
+                        <span class="text-xs font-normal px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">OAuth 2.0 Ready</span>
+                    </h3>
+                    <p class="text-xs text-gray-500 mt-1">
+                        Connect your corporate email inbox to automatically stream and parse inbound candidate applications with zero manual token handling.
+                    </p>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Mailbox Address</label>
-                    <input id="emailAddress" type="email" required placeholder="hr@company.com" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">IMAP Host</label>
-                    <input id="imapHost" type="text" placeholder="imap.gmail.com" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">IMAP Port</label>
-                    <input id="imapPort" type="number" value="993" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-500 mb-1">Folder Filter</label>
-                    <input id="folderFilter" type="text" value="INBOX" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
-                </div>
-                <div id="appPasswordField">
-                    <label class="block text-xs text-gray-500 mb-1">App Password</label>
-                    <input id="appPassword" type="password" placeholder="xxxx xxxx xxxx xxxx" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
-                </div>
-                <div id="oauthFields" class="hidden md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+            </div>
+
+            <!-- One-Click Cloud OAuth Connect Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mb-6">
+                <!-- Google Workspace Card -->
+                <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:border-gray-300 transition flex flex-col justify-between">
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">OAuth Refresh Token</label>
-                        <input id="refreshToken" type="password" placeholder="Encrypted at rest after submission" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-9 h-9 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center">
+                                    <!-- Official 4-Color Google 'G' Logo -->
+                                    <svg class="w-5 h-5" viewBox="0 0 24 24">
+                                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-semibold text-gray-800">Google Workspace</h4>
+                                    <p class="text-xs text-gray-400">Gmail API Ingestion</p>
+                                </div>
+                            </div>
+                            <span class="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">Recommended</span>
+                        </div>
+                        <p class="text-xs text-gray-600 mb-4 leading-relaxed">
+                            Connect your hiring inbox via Google OAuth consent. Automatic ingestion scans inbound resume attachments with read-only access.
+                        </p>
                     </div>
+                    <button type="button" onclick="startOAuthConnect('google')" class="w-full flex items-center justify-center gap-2.5 bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 hover:border-gray-400 transition text-sm">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                        </svg>
+                        <span>Connect Google Workspace</span>
+                    </button>
+                </div>
+
+                <!-- Microsoft 365 Card -->
+                <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:border-gray-300 transition flex flex-col justify-between">
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Access Token (optional)</label>
-                        <input id="accessToken" type="password" placeholder="Short-lived access token" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-9 h-9 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center">
+                                    <!-- Official Microsoft 4-Color Square Logo -->
+                                    <svg class="w-5 h-5" viewBox="0 0 23 23">
+                                        <path fill="#f35325" d="M1 1h10v10H1z"/>
+                                        <path fill="#81bc06" d="M12 1h10v10H12z"/>
+                                        <path fill="#05a6f0" d="M1 12h10v10H1z"/>
+                                        <path fill="#ffba08" d="M12 12h10v10H12z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-semibold text-gray-800">Microsoft 365</h4>
+                                    <p class="text-xs text-gray-400">Outlook / Graph API</p>
+                                </div>
+                            </div>
+                            <span class="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">Enterprise</span>
+                        </div>
+                        <p class="text-xs text-gray-600 mb-4 leading-relaxed">
+                            Connect your Microsoft 365 or Outlook Exchange mailbox. Streams inbound resumes directly using enterprise-grade PKCE OAuth authentication.
+                        </p>
                     </div>
+                    <button type="button" onclick="startOAuthConnect('microsoft')" class="w-full flex items-center justify-center gap-2.5 bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 hover:border-gray-400 transition text-sm">
+                        <svg class="w-4 h-4" viewBox="0 0 23 23">
+                            <path fill="#f35325" d="M1 1h10v10H1z"/>
+                            <path fill="#81bc06" d="M12 1h10v10H12z"/>
+                            <path fill="#05a6f0" d="M1 12h10v10H1z"/>
+                            <path fill="#ffba08" d="M12 12h10v10H12z"/>
+                        </svg>
+                        <span>Connect Microsoft 365</span>
+                    </button>
                 </div>
-                <div class="md:col-span-2 flex gap-3">
-                    <button type="submit" class="bg-hf-slate text-white px-5 py-2 rounded-lg text-sm hover:bg-gray-800 transition">Connect Mailbox</button>
+            </div>
+
+            <!-- Collapsible Legacy IMAP Section -->
+            <details class="group border border-gray-200 rounded-xl bg-gray-50/50 mb-6 max-w-4xl overflow-hidden">
+                <summary class="p-4 cursor-pointer text-xs font-semibold text-gray-600 hover:text-hf-slate flex items-center justify-between select-none">
+                    <div class="flex items-center gap-2">
+                        <span>⚙️</span>
+                        <span>Advanced / Custom: Connect via Standard IMAP (App Password)</span>
+                    </div>
+                    <span class="transition-transform group-open:rotate-180 text-gray-400 text-xs">▼</span>
+                </summary>
+                <div class="p-4 pt-0 border-t border-gray-100 bg-white">
+                    <p class="text-xs text-gray-500 mb-4 mt-3">
+                        Use this for custom on-premises mail servers, Dovecot, Zimbra, or standard IMAP mailboxes using an application-specific password.
+                    </p>
+                    <form id="emailForm" onsubmit="createMailConnection(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input type="hidden" id="emailProvider" value="IMAP_APP_PASSWORD">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Mailbox Address</label>
+                            <input id="emailAddress" type="email" required placeholder="hr@company.com" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">IMAP Host</label>
+                            <input id="imapHost" type="text" required placeholder="imap.company.com" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">IMAP Port</label>
+                            <input id="imapPort" type="number" value="993" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Folder Filter</label>
+                            <input id="folderFilter" type="text" value="INBOX" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
+                        </div>
+                        <div id="appPasswordField" class="md:col-span-2">
+                            <label class="block text-xs text-gray-500 mb-1">App Password</label>
+                            <input id="appPassword" type="password" required placeholder="•••• •••• •••• ••••" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-hf-lavender">
+                        </div>
+                        <div class="md:col-span-2 flex gap-3">
+                            <button type="submit" class="bg-hf-slate text-white px-5 py-2 rounded-lg text-sm hover:bg-gray-800 transition font-medium">Connect IMAP Mailbox</button>
+                        </div>
+                    </form>
                 </div>
-            </form>
+            </details>
+
             <div id="mailConnections" class="mt-5"></div>
             <div id="syncResultAlert" class="mt-4 hidden p-3 rounded-lg text-xs font-mono"></div>
         </div>
@@ -457,6 +544,7 @@ async function autoLogin() {
             document.getElementById('extConsoleToken').textContent = document.getElementById('kpiExtToken').textContent;
         }
         updateCredentialFields();
+        checkOAuthRedirectResult();
         startAutoRefresh();
     } catch (e) {
         document.getElementById('authStatus').textContent = '⚠ Login failed';
@@ -687,10 +775,120 @@ async function handleFiles(files) {
 // ──────────────────────────────────────
 //  Tab B: Connect Inbox
 // ──────────────────────────────────────
+function normalizeOAuthProvider(provider) {
+    if (!provider) return 'google';
+    const p = provider.toLowerCase();
+    if (p.includes('google') || p.includes('gmail')) return 'google';
+    if (p.includes('micro') || p.includes('graph') || p.includes('office') || p.includes('ms')) return 'microsoft';
+    return p;
+}
+
+async function startOAuthConnect(provider) {
+    const normalized = normalizeOAuthProvider(provider);
+    try {
+        toast(`Initiating ${normalized === 'google' ? 'Google Workspace' : 'Microsoft 365'} connection…`, 'info');
+        const res = await api('GET', `/api/v1/mail-connections/oauth/${normalized}/authorize`);
+        if (!res || !res.authorizationUrl) {
+            throw new Error('Server did not return a valid authorization URL');
+        }
+
+        const width = 600;
+        const height = 700;
+        const left = window.screenX + Math.max(0, (window.outerWidth - width) / 2);
+        const top = window.screenY + Math.max(0, (window.outerHeight - height) / 2);
+
+        const popup = window.open(
+            res.authorizationUrl,
+            'hireflow_oauth_popup',
+            `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=no,resizable=yes`
+        );
+
+        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+            console.warn('OAuth popup blocked by browser; falling back to full-page redirect.');
+            window.location.href = res.authorizationUrl;
+        } else {
+            popup.focus();
+        }
+    } catch (err) {
+        toast('Connection initiation failed: ' + err.message, 'error');
+    }
+}
+
+// Global listener for OAuth callback postMessage
+window.addEventListener('message', async (event) => {
+    if (event.origin !== window.location.origin) return;
+    if (!event.data || event.data.type !== 'HIREFLOW_OAUTH_CALLBACK') return;
+
+    if (event.data.status === 'SUCCESS') {
+        const provLabel = (event.data.provider || '').toLowerCase().includes('micro') ? 'Microsoft 365' : 'Google Workspace';
+        const mailbox = event.data.mailboxAddress ? ` (${event.data.mailboxAddress})` : '';
+        toast(`Successfully connected ${provLabel}${mailbox}!`, 'success');
+        await Promise.all([loadMailConnections(), loadKPIs()]);
+    } else {
+        const errorMsg = event.data.error || 'Mailbox authorization was not completed';
+        toast(`Connection failed: ${errorMsg}`, 'error');
+        await loadMailConnections();
+    }
+});
+
+function checkOAuthRedirectResult() {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('oauth')) return;
+
+    const status = params.get('oauth');
+    const provider = params.get('provider') || '';
+    const mailbox = params.get('mailbox') || '';
+    const errorMsg = params.get('msg') || params.get('error') || 'Authorization was cancelled or failed';
+
+    if (status === 'success') {
+        const provLabel = provider.toLowerCase().includes('micro') ? 'Microsoft 365' : 'Google Workspace';
+        toast(`Successfully connected ${provLabel}${mailbox ? ' (' + mailbox + ')' : ''}!`, 'success');
+        switchTab('email');
+    } else if (status === 'error') {
+        toast(`Connection failed: ${errorMsg}`, 'error');
+        switchTab('email');
+    }
+
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, cleanUrl);
+}
+
+function formatLastSync(dateStr) {
+    if (!dateStr) return '<span class="text-gray-400">Never synced</span>';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '<span class="text-gray-400">Never synced</span>';
+
+    const now = Date.now();
+    const diffSec = Math.floor((now - d.getTime()) / 1000);
+    const isoString = d.toISOString();
+    const localString = d.toLocaleString();
+
+    let relative = '';
+    if (diffSec < 0 || diffSec < 45) {
+        relative = 'Just now';
+    } else if (diffSec < 3600) {
+        const mins = Math.max(1, Math.floor(diffSec / 60));
+        relative = `${mins} min${mins > 1 ? 's' : ''} ago`;
+    } else if (diffSec < 86400) {
+        const hours = Math.floor(diffSec / 3600);
+        relative = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    } else if (diffSec < 604800) {
+        const days = Math.floor(diffSec / 86400);
+        relative = `${days} day${days > 1 ? 's' : ''} ago`;
+    } else {
+        relative = d.toLocaleDateString();
+    }
+
+    return `<span class="text-gray-700 font-medium" title="${esc(localString)} (${esc(isoString)})">${relative}</span>`;
+}
+
 function autoFillImap() {
-    const p = document.getElementById('emailProvider').value;
+    const pEl = document.getElementById('emailProvider');
+    if (!pEl) return;
+    const p = pEl.value;
     const hostEl = document.getElementById('imapHost');
     const portEl = document.getElementById('imapPort');
+    if (!hostEl || !portEl) return;
     if (p === 'IMAP_APP_PASSWORD') {
         // Keep user-entered values
     } else if (p === 'GMAIL_OAUTH') {
@@ -702,35 +900,33 @@ function autoFillImap() {
 }
 
 function updateCredentialFields() {
-    const provider = document.getElementById('emailProvider').value;
+    const providerEl = document.getElementById('emailProvider');
+    if (!providerEl) return;
+    const provider = providerEl.value;
     const isImap = provider === 'IMAP_APP_PASSWORD';
-    document.getElementById('appPasswordField').classList.toggle('hidden', !isImap);
-    document.getElementById('oauthFields').classList.toggle('hidden', isImap);
+    const appPwEl = document.getElementById('appPasswordField');
+    if (appPwEl) appPwEl.classList.toggle('hidden', !isImap);
+    const oauthEl = document.getElementById('oauthFields');
+    if (oauthEl) oauthEl.classList.toggle('hidden', isImap);
 }
 
 async function createMailConnection(e) {
     e.preventDefault();
     try {
-        const provider = document.getElementById('emailProvider').value;
+        const providerEl = document.getElementById('emailProvider');
+        const provider = providerEl ? providerEl.value : 'IMAP_APP_PASSWORD';
         const payload = {
             provider,
             mailboxAddress: document.getElementById('emailAddress').value,
             imapHost: document.getElementById('imapHost').value,
             imapPort: parseInt(document.getElementById('imapPort').value) || 993,
             folderFilter: document.getElementById('folderFilter').value,
+            appPassword: document.getElementById('appPassword').value
         };
-        if (provider === 'IMAP_APP_PASSWORD') {
-            payload.appPassword = document.getElementById('appPassword').value;
-        } else {
-            const refresh = document.getElementById('refreshToken').value.trim();
-            const access = document.getElementById('accessToken').value.trim();
-            if (refresh) payload.refreshToken = refresh;
-            if (access) payload.accessToken = access;
-        }
+
         await api('POST', '/api/v1/mail-connections', payload);
-        toast('Inbox connected!', 'success');
+        toast('IMAP mailbox connected successfully!', 'success');
         document.getElementById('emailForm').reset();
-        updateCredentialFields();
         loadMailConnections();
         loadKPIs();
     } catch (e) {
@@ -742,31 +938,92 @@ async function loadMailConnections() {
     try {
         const conns = await api('GET', '/api/v1/mail-connections');
         const el = document.getElementById('mailConnections');
-        if (!conns.length) { el.innerHTML = '<p class="text-xs text-gray-400">No mail connections yet.</p>'; return; }
-        el.innerHTML = '<h4 class="text-xs font-medium text-gray-500 mb-2">Active Connections</h4>' +
+        if (!el) return;
+        if (!conns || !conns.length) {
+            el.innerHTML = '<p class="text-xs text-gray-400">No mail connections yet. Connect Google Workspace or Microsoft 365 above to get started.</p>';
+            return;
+        }
+
+        el.innerHTML = '<h4 class="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3">Active Mailbox Connections</h4>' +
             conns.map(c => {
-                const statusBadge = c.status === 'ACTIVE' 
-                    ? '<span class="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-medium">ACTIVE</span>'
-                    : c.status === 'ERROR'
-                    ? '<span class="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded-full font-medium">ERROR</span>'
-                    : '<span class="bg-yellow-100 text-yellow-700 text-[10px] px-2 py-0.5 rounded-full font-medium">' + esc(c.status) + '</span>';
-                const lastSync = c.lastSuccessAt ? new Date(c.lastSuccessAt).toLocaleString() : 'Never synced';
-                return `
-                <div class="flex items-center justify-between bg-gray-50 rounded-lg p-3 mb-2 border border-gray-100">
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm font-medium">${esc(c.mailboxAddress)}</span>
-                            ${statusBadge}
+                let statusBadge = '';
+                if (c.status === 'ACTIVE') {
+                    statusBadge = '<span class="bg-green-100 text-green-700 border border-green-200 text-[10px] px-2 py-0.5 rounded-full font-semibold">ACTIVE</span>';
+                } else if (c.status === 'REAUTH') {
+                    statusBadge = '<span class="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] px-2 py-0.5 rounded-full font-semibold animate-pulse">REAUTH REQUIRED</span>';
+                } else if (c.status === 'ERROR') {
+                    statusBadge = '<span class="bg-red-100 text-red-700 border border-red-200 text-[10px] px-2 py-0.5 rounded-full font-semibold">ERROR</span>';
+                } else if (c.status === 'PAUSED') {
+                    statusBadge = '<span class="bg-gray-100 text-gray-600 border border-gray-200 text-[10px] px-2 py-0.5 rounded-full font-semibold">PAUSED</span>';
+                } else {
+                    statusBadge = `<span class="bg-yellow-100 text-yellow-700 border border-yellow-200 text-[10px] px-2 py-0.5 rounded-full font-semibold">${esc(c.status)}</span>`;
+                }
+
+                const p = (c.provider || '').toLowerCase();
+                let providerLabel = esc(c.provider);
+                let providerIcon = '📧';
+                if (p.includes('google') || p.includes('gmail')) {
+                    providerLabel = 'Google Workspace';
+                    providerIcon = '<svg class="w-4 h-4 inline" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>';
+                } else if (p.includes('micro') || p.includes('graph')) {
+                    providerLabel = 'Microsoft 365';
+                    providerIcon = '<svg class="w-4 h-4 inline" viewBox="0 0 23 23"><path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/><path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/></svg>';
+                } else if (p.includes('imap')) {
+                    providerLabel = 'IMAP';
+                    providerIcon = '📨';
+                }
+
+                const lastSyncHtml = formatLastSync(c.lastSuccessAt);
+
+                const isSyncDisabled = c.status === 'REAUTH' || c.status === 'PAUSED';
+                const syncBtn = isSyncDisabled
+                    ? `<button disabled title="Mailbox is ${esc(c.status)} and must be reconnected first" class="px-2.5 py-1 text-xs bg-gray-200 text-gray-400 rounded cursor-not-allowed font-medium">Sync Now</button>`
+                    : `<button onclick="syncMailConn(this, '${c.id}')" class="px-2.5 py-1 text-xs bg-hf-slate text-white rounded hover:bg-gray-800 transition font-medium">Sync Now</button>`;
+
+                const isReauth = c.status === 'REAUTH';
+                const reauthBanner = isReauth
+                    ? `<div class="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200 flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex items-center gap-2 text-xs text-amber-800">
+                            <span class="text-sm">⚠️</span>
+                            <span><strong>Reauthorization Required:</strong> Session expired or permissions revoked. Reconnect this mailbox to resume automated candidate intake.</span>
                         </div>
-                        <div class="text-xs text-gray-400 mt-0.5">${esc(c.provider)} · ${esc(c.imapHost || 'OAuth')} · Folder: ${esc(c.folderFilter || 'INBOX')} · Last Sync: ${lastSync}</div>
+                        <button type="button" onclick="startOAuthConnect('${esc(c.provider)}')" class="px-3 py-1 bg-amber-600 text-white rounded text-xs font-semibold hover:bg-amber-700 transition shadow-sm flex items-center gap-1.5">
+                            <span>🔑</span>
+                            <span>Reauthorize Now</span>
+                        </button>
+                    </div>`
+                    : '';
+
+                return `
+                <div class="bg-gray-50 rounded-xl p-4 mb-3 border border-gray-200 hover:border-gray-300 transition">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <div class="flex items-center gap-2.5">
+                                <span class="flex items-center justify-center w-6 h-6 rounded-md bg-white border border-gray-200 shadow-2xs">${providerIcon}</span>
+                                <span class="text-sm font-semibold text-gray-900">${esc(c.mailboxAddress)}</span>
+                                ${statusBadge}
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span class="font-medium text-gray-600">${providerLabel}</span>
+                                <span>·</span>
+                                <span>Host: ${esc(c.imapHost || 'Cloud API')}</span>
+                                <span>·</span>
+                                <span>Folder: ${esc(c.folderFilter || 'INBOX')}</span>
+                                <span>·</span>
+                                <span>Last Sync: ${lastSyncHtml}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            ${syncBtn}
+                            <button onclick="deleteMailConn('${c.id}')" class="px-2.5 py-1 text-xs border border-red-200 text-red-600 rounded hover:bg-red-50 transition font-medium">Disconnect</button>
+                        </div>
                     </div>
-                    <div class="flex gap-2">
-                        <button onclick="syncMailConn(this, '${c.id}')" class="px-2.5 py-1 text-xs bg-hf-slate text-white rounded hover:bg-gray-800 transition font-medium">Sync Now</button>
-                        <button onclick="deleteMailConn('${c.id}')" class="px-2.5 py-1 text-xs border border-red-200 text-red-600 rounded hover:bg-red-50 transition">Remove</button>
-                    </div>
+                    ${reauthBanner}
                 </div>`;
             }).join('');
-    } catch (e) { /* silent */ }
+    } catch (e) {
+        console.error('Failed to load mail connections:', e);
+    }
 }
 
 async function syncMailConn(btn, id) {

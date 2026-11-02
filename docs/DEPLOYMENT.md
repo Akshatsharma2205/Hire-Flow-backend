@@ -145,7 +145,74 @@ In the `prod` profile, startup fails immediately if any of these variables are u
 | `hireflow.worker.batch-size` | `WORKER_BATCH_SIZE` | No | `10` | All | Number of queued resume jobs retrieved per worker batch. |
 | `hireflow.worker.stale-after-minutes` | `WORKER_STALE_MINUTES` | No | `10` (10 minutes) | All | Inactivity duration before an in-progress parsing job is marked stale and re-queued. |
 
-### 3.3 Development-Only Environment Variables (Forbidden in Production)
+---
+
+### 3.3 Google & Microsoft OAuth 2.0 Mailbox Configuration
+
+HireFlow connects recruiter mailboxes via standard OAuth 2.0 authorization code flows with PKCE. Recruiters grant delegated permissions directly through provider consent screens without sharing raw credentials or handling manual tokens.
+
+#### 3.3.1 Required Delegated Scopes
+The backend requests the minimum required delegated permissions needed for profile resolution and read-only message/attachment synchronization:
+
+- **Google Workspace / Gmail**:
+  - `https://www.googleapis.com/auth/gmail.readonly`: Read-only access to messages, threads, history, and attachments for resume ingestion.
+  - `https://www.googleapis.com/auth/userinfo.email`: Resolves the authenticated user's primary email address during connection setup.
+  - Parameters requested: `access_type=offline`, `prompt=consent` (ensures initial issuance of refresh token).
+- **Microsoft 365 / Outlook Graph**:
+  - `offline_access`: Requests refresh token for ongoing background mailbox synchronization.
+  - `https://graph.microsoft.com/Mail.Read`: Delegated read access to mail folders and messages.
+  - `https://graph.microsoft.com/User.Read`: Delegated profile access to resolve user email address (`mail` or `userPrincipalName`).
+  - Security parameters: PKCE `code_challenge_method=S256` with high-entropy cryptographic verifier.
+
+#### 3.3.2 Authorized Redirect URIs
+The OAuth authorization callback is hosted at:
+`/api/v1/mail-connections/oauth/{provider}/callback`
+
+Configure the authorized redirect URIs in provider developer consoles:
+
+| Provider | Environment | Authorized Redirect URI | Authorized Origin |
+|---|---|---|---|
+| **Google** | Local Development | `http://localhost:8080/api/v1/mail-connections/oauth/google/callback` | `http://localhost:8080` |
+| **Google** | Production | `https://<your-domain>/api/v1/mail-connections/oauth/google/callback` | `https://<your-domain>` |
+| **Microsoft** | Local Development | `http://localhost:8080/api/v1/mail-connections/oauth/microsoft/callback` | `http://localhost:8080` |
+| **Microsoft** | Production | `https://<your-domain>/api/v1/mail-connections/oauth/microsoft/callback` | `https://<your-domain>` |
+
+#### 3.3.3 Development vs Production Setup
+
+- **Google Cloud Console Setup**:
+  1. Navigate to **APIs & Services > OAuth consent screen**.
+  2. **Development / Testing**: Set User Type to **External** and Publishing status to **Testing**. Add designated recruiter emails under **Test users** (up to 100 test users allowed without Google verification).
+  3. **Production**: Set Publishing status to **In Production**. For internal enterprise use within a single Google Workspace domain, set User Type to **Internal** (exempt from external verification and CASA Tier 2).
+  4. Under **Credentials > Create Credentials > OAuth client ID**, select **Web application**. Add the Authorized JavaScript origins and Authorized redirect URIs matching your deployment domain.
+  5. Set environment variables: `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
+
+- **Microsoft Azure Portal (Entra ID) Setup**:
+  1. Navigate to **Microsoft Entra ID > App registrations > New registration**.
+  2. Set **Supported account types**:
+     - For multi-tenant recruitment across any Microsoft account: Select **Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts** (corresponds to `MS_OAUTH_TENANT=common`).
+     - For single-organization deployments: Select **Accounts in this organizational directory only** and set `MS_OAUTH_TENANT=<your-tenant-uuid>`.
+  3. Under **Redirect URI**, select **Web** and enter `https://<your-domain>/api/v1/mail-connections/oauth/microsoft/callback`.
+  4. Navigate to **Certificates & secrets > Client secrets > New client secret**. Copy secret value to `MS_OAUTH_CLIENT_SECRET`.
+  5. Copy Application (client) ID to `MS_OAUTH_CLIENT_ID`.
+  6. Under **API permissions**, add delegated permissions for Microsoft Graph: `Mail.Read`, `User.Read`, `offline_access`.
+
+#### 3.3.4 OAuth Verification Implications: Google CASA Tier 2 Restricted Scope Assessment
+Because HireFlow requests `https://www.googleapis.com/auth/gmail.readonly`, it falls into Google's **Restricted Scopes** tier:
+
+1. **Development & Internal Exemption**:
+   - Apps with publishing status **Testing** (restricted to test users) or apps configured as **Internal** to a Google Workspace domain do **not** require CASA assessment or Google verification.
+2. **Production Multi-Tenant Verification**:
+   - If HireFlow is deployed as a public or multi-tenant SaaS application allowing external Google users to connect Gmail mailboxes, Google mandates **OAuth App Verification** and a **Cloud Application Security Assessment (CASA) Tier 2** assessment.
+   - **CASA Tier 2 Requirements**:
+     - Evaluated against OWASP ASVS (Application Security Verification Standard) Level 2 controls.
+     - Third-party security assessment by an authorized CASA testing laboratory.
+     - Static and dynamic application security testing (SAST / DAST).
+     - Cloud deployment infrastructure review ensuring encrypted token storage (satisfied by HireFlow's AES-256-GCM `CryptoUtil`), tenant isolation, and strict access control.
+     - Mandatory annual re-certification and ongoing vulnerability management.
+
+---
+
+### 3.4 Development-Only Environment Variables (Forbidden in Production)
 
 | Property Name | Environment Variable | Permitted Profiles | Behavior in `prod` Profile |
 |---|---|---|---|
@@ -194,6 +261,7 @@ java -server \
    - `V2__seed_data.sql`: Seed data (sanitized automatically in `prod` profile)
    - `V3__performance_indices.sql`: Production composite indices
    - `V4__webhook_security_and_idempotency.sql`: Webhook security & idempotency tables
+   - `V5__oauth_authorization_attempts.sql`: OAuth 2.0 authorization attempt ledger, state token indexes, PKCE verifiers, and mailbox index
 
 ---
 
