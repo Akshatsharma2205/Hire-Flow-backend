@@ -238,8 +238,8 @@ export const RulesPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Recruitment Email Rules</h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Recruitment Email Rules</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Deterministic include/exclude filtering, folder routing, and automated job mapping.
           </p>
         </div>
@@ -255,13 +255,13 @@ export const RulesPage: React.FC = () => {
       </div>
 
       {/* Rules Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <span className="text-xs font-semibold text-white">Active Rule Order (Priority ASC)</span>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
+          <span className="text-xs font-semibold text-slate-900 dark:text-white">Active Rule Order (Priority ASC)</span>
           <span className="text-[11px] text-slate-500">First matching rule governs applicant ingestion</span>
         </div>
 
-        <div className="divide-y divide-slate-800/60">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
           {isLoading ? (
             <div className="py-16 text-center text-slate-500 text-xs">Loading rules...</div>
           ) : rules.length === 0 ? (
@@ -272,36 +272,36 @@ export const RulesPage: React.FC = () => {
             rules.map((rule, idx) => (
               <div
                 key={rule.id}
-                className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-800/30 transition-colors"
+                className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors"
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-slate-300 shrink-0 mt-0.5">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-slate-300 shrink-0 mt-0.5">
                     #{idx + 1}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white text-xs">{rule.name}</span>
+                      <span className="font-semibold text-slate-900 dark:text-white text-xs">{rule.name}</span>
                       <Badge variant={rule.enabled ? 'emerald' : 'slate'} size="sm" dot>
                         {rule.enabled ? 'Active' : 'Disabled'}
                       </Badge>
                     </div>
 
-                    <p className="text-[11px] text-slate-400 mt-1 line-clamp-1">
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 line-clamp-1">
                       {rule.description || 'Applies to inbound messages.'}
                     </p>
 
                     <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] text-slate-500">
                       {rule.subjectKeywords && rule.subjectKeywords.length > 0 && (
-                        <span className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded">
+                        <span className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-400">
                           Keywords: {rule.subjectKeywords.slice(0, 3).join(', ')}
                         </span>
                       )}
                       {rule.targetJobId && (
-                        <span className="bg-indigo-950/60 border border-indigo-800/60 text-indigo-400 px-2 py-0.5 rounded">
+                        <span className="bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded">
                           Target Job Mapped
                         </span>
                       )}
-                      <span className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded">
+                      <span className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-400">
                         Policy: {rule.duplicatePolicy}
                       </span>
                     </div>
@@ -310,12 +310,12 @@ export const RulesPage: React.FC = () => {
 
                 <div className="flex items-center gap-2 self-end md:self-center">
                   {/* Priority Reordering Buttons */}
-                  <div className="flex items-center border border-slate-800 rounded-lg p-0.5 bg-slate-950">
+                  <div className="flex items-center border border-slate-200 dark:border-slate-800 rounded-lg p-0.5 bg-slate-100 dark:bg-slate-950">
                     <button
                       type="button"
                       disabled={idx === 0 || isReordering}
                       onClick={() => handleMoveRule(idx, -1)}
-                      className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                      className="p-1.5 rounded text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
                       title="Move up (increase priority)"
                       aria-label={`Move ${rule.name} up`}
                     >
@@ -325,7 +325,7 @@ export const RulesPage: React.FC = () => {
                       type="button"
                       disabled={idx === rules.length - 1 || isReordering}
                       onClick={() => handleMoveRule(idx, 1)}
-                      className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                      className="p-1.5 rounded text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
                       title="Move down (decrease priority)"
                       aria-label={`Move ${rule.name} down`}
                     >
@@ -337,8 +337,8 @@ export const RulesPage: React.FC = () => {
                     onClick={() => handleToggleStatus(rule)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                       rule.enabled
-                        ? 'border-emerald-800 text-emerald-400 hover:bg-emerald-950/40'
-                        : 'border-slate-700 text-slate-400 hover:bg-slate-800'
+                        ? 'border-teal-300 dark:border-teal-800 text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50'
+                        : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     {rule.enabled ? 'Disable' : 'Enable'}
@@ -356,7 +356,7 @@ export const RulesPage: React.FC = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDeleteRule(rule)}
-                    className="text-slate-500 hover:text-rose-400"
+                    className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
@@ -368,14 +368,14 @@ export const RulesPage: React.FC = () => {
       </div>
 
       {/* Rule Preview & Test Simulator */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm dark:shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Play className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Play className="w-4 h-4 text-teal-600 dark:text-teal-400" />
               Rule Preview Simulator
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Dry-run evaluate a hypothetical message against all active rules without ingesting data.
             </p>
           </div>
@@ -393,76 +393,76 @@ export const RulesPage: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Sample Payload Form */}
-          <div className="space-y-3 bg-slate-950/60 border border-slate-800 p-4 rounded-xl text-xs">
+          <div className="space-y-3 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 p-4 rounded-xl text-xs">
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Simulated Sender Email</label>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">Simulated Sender Email</label>
               <input
                 type="text"
                 value={simSender}
                 onChange={(e) => setSimSender(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Simulated Subject Line</label>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">Simulated Subject Line</label>
               <input
                 type="text"
                 value={simSubject}
                 onChange={(e) => setSimSubject(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Simulated Attachment Filename</label>
+              <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">Simulated Attachment Filename</label>
               <input
                 type="text"
                 value={simFilename}
                 onChange={(e) => setSimFilename(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
           </div>
 
           {/* Evaluation Outcome Display */}
-          <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-xl text-xs flex flex-col justify-between">
+          <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 p-4 rounded-xl text-xs flex flex-col justify-between">
             <div>
-              <span className="text-[11px] font-semibold text-slate-400 block mb-3 uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-3 uppercase tracking-wider">
                 Evaluation Decision Breakdown
               </span>
 
               {previewResult ? (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-slate-900 border border-slate-800 rounded-lg">
-                    <span className="text-slate-400">Matched Rule:</span>
-                    <span className="font-semibold text-emerald-400">
+                  <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg">
+                    <span className="text-slate-600 dark:text-slate-400">Matched Rule:</span>
+                    <span className="font-semibold text-teal-600 dark:text-teal-400">
                       {previewResult.matchedRuleName || 'No Rule Matched (Default Fallback)'}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 bg-slate-900 border border-slate-800 rounded-lg">
-                    <span className="text-slate-400">Selected Requisition:</span>
-                    <span className="font-semibold text-white">
+                  <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg">
+                    <span className="text-slate-600 dark:text-slate-400">Selected Requisition:</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">
                       {previewResult.targetJobTitle || (previewResult.targetJobId ? 'Job #' + previewResult.targetJobId.slice(0, 8) : 'Auto-match')}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 bg-slate-900 border border-slate-800 rounded-lg">
-                    <span className="text-slate-400">Review Queue Routing:</span>
+                  <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg">
+                    <span className="text-slate-600 dark:text-slate-400">Review Queue Routing:</span>
                     <Badge variant={previewResult.routeToReview ? 'amber' : 'emerald'} size="sm">
                       {previewResult.routeToReview ? 'YES (Conflict/Ambiguity)' : 'NO (Direct Process)'}
                     </Badge>
                   </div>
 
                   {previewResult.explanation && (
-                    <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-lg text-[11px] text-slate-300">
+                    <div className="p-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] text-slate-700 dark:text-slate-300">
                       {previewResult.explanation}
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="py-12 text-center text-slate-600 text-xs">
+                <div className="py-12 text-center text-slate-400 dark:text-slate-600 text-xs">
                   Run simulation to verify rule condition matching and action resolution.
                 </div>
               )}
@@ -482,34 +482,34 @@ export const RulesPage: React.FC = () => {
         <form onSubmit={handleSaveRule} className="space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-300 mb-1">Rule Name *</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Rule Name *</label>
               <input
                 type="text"
                 value={ruleName}
                 onChange={(e) => setRuleName(e.target.value)}
                 placeholder="e.g. Campus Engineering Ingestion"
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Priority Index</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Priority Index</label>
               <input
                 type="number"
                 value={rulePriority}
                 onChange={(e) => setRulePriority(Number(e.target.value))}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Target Mailbox Scope</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Target Mailbox Scope</label>
               <select
                 value={ruleMailboxId}
                 onChange={(e) => setRuleMailboxId(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               >
                 <option value="">All Mailboxes (Global)</option>
                 {connections.map((c) => (
@@ -520,58 +520,58 @@ export const RulesPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Folder / Label Filter</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Folder / Label Filter</label>
               <input
                 type="text"
                 value={ruleFolder}
                 onChange={(e) => setRuleFolder(e.target.value)}
                 placeholder="e.g. INBOX, Careers"
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Sender Include (comma-separated)</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Sender Include (comma-separated)</label>
               <input
                 type="text"
                 value={ruleSenderInclude}
                 onChange={(e) => setRuleSenderInclude(e.target.value)}
                 placeholder="*@mit.edu, *@iit.ac.in"
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Sender Exclude</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Sender Exclude</label>
               <input
                 type="text"
                 value={ruleSenderExclude}
                 onChange={(e) => setRuleSenderExclude(e.target.value)}
                 placeholder="*no-reply*, *newsletter*"
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Subject Keywords (comma-separated)</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Subject Keywords (comma-separated)</label>
             <input
               type="text"
               value={ruleSubjectKeywords}
               onChange={(e) => setRuleSubjectKeywords(e.target.value)}
               placeholder="resume, job application, cv"
-              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Target Job Mapping</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Target Job Mapping</label>
               <select
                 value={ruleTargetJobId}
                 onChange={(e) => setRuleTargetJobId(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               >
                 <option value="">Auto-match Open Jobs (or Review Queue)</option>
                 {jobs.map((j) => (
@@ -583,11 +583,11 @@ export const RulesPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Duplicate Policy</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Duplicate Policy</label>
               <select
                 value={ruleDuplicatePolicy}
                 onChange={(e) => setRuleDuplicatePolicy(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               >
                 <option value="UPDATE_PROFILE_ONLY">UPDATE_PROFILE_ONLY</option>
                 <option value="REPLACE_PROFILE">REPLACE_PROFILE</option>
@@ -603,9 +603,9 @@ export const RulesPage: React.FC = () => {
               id="reqAtt"
               checked={ruleRequireAttachment}
               onChange={(e) => setRuleRequireAttachment(e.target.checked)}
-              className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500"
+              className="rounded bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-teal-600 focus:ring-teal-500"
             />
-            <label htmlFor="reqAtt" className="text-xs text-slate-300">
+            <label htmlFor="reqAtt" className="text-xs text-slate-700 dark:text-slate-300">
               Require valid PDF/DOCX attachment to match rule
             </label>
           </div>

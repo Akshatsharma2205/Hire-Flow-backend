@@ -140,21 +140,21 @@ export const ApplicationsPage: React.FC = () => {
       {/* Top Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Application Pipeline</h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Application Pipeline</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Track candidates across recruitment stages with verifiable audit histories.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           {/* View mode toggle */}
-          <div className="bg-slate-900 border border-slate-800 p-1 rounded-xl flex items-center">
+          <div className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl flex items-center">
             <button
               onClick={() => setViewMode('kanban')}
               className={`p-1.5 rounded-lg text-xs transition-colors ${
                 viewMode === 'kanban'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
               title="Kanban Board"
             >
@@ -164,8 +164,8 @@ export const ApplicationsPage: React.FC = () => {
               onClick={() => setViewMode('table')}
               className={`p-1.5 rounded-lg text-xs transition-colors ${
                 viewMode === 'table'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
               title="Table View"
             >
@@ -200,12 +200,12 @@ export const ApplicationsPage: React.FC = () => {
             return (
               <div
                 key={col.id}
-                className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 flex flex-col min-w-[200px]"
+                className="bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col min-w-[200px] shadow-sm"
               >
                 {/* Column Header */}
-                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white tracking-tight">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white tracking-tight">
                       {col.label}
                     </span>
                   </div>
@@ -217,35 +217,35 @@ export const ApplicationsPage: React.FC = () => {
                 {/* Cards Container */}
                 <div className="space-y-2.5 flex-1 min-h-[350px]">
                   {colApps.length === 0 ? (
-                    <div className="h-28 border border-dashed border-slate-800/80 rounded-xl flex items-center justify-center text-[11px] text-slate-600">
+                    <div className="h-28 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl flex items-center justify-center text-[11px] text-slate-400 dark:text-slate-600">
                       No candidates
                     </div>
                   ) : (
                     colApps.map((app) => (
                       <div
                         key={app.id}
-                        className="bg-slate-950 border border-slate-800 hover:border-slate-700 p-3 rounded-xl transition-all shadow-md group"
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 p-3 rounded-xl transition-all shadow-sm hover:shadow-md group"
                       >
                         <div className="flex items-start justify-between gap-1">
-                          <span className="font-semibold text-white text-xs group-hover:text-emerald-400 transition-colors line-clamp-1">
+                          <span className="font-semibold text-slate-900 dark:text-white text-xs group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors line-clamp-1">
                             {app.candidateName || 'Applicant'}
                           </span>
                           <button
                             onClick={() => handleOpenHistory(app)}
-                            className="text-slate-500 hover:text-slate-300 p-1 rounded"
+                            className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 p-1 rounded"
                             title="Audit history"
                           >
                             <History className="w-3.5 h-3.5" />
                           </button>
                         </div>
 
-                        <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-1 truncate">
-                          <Briefcase className="w-3 h-3 text-slate-500 shrink-0" />
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1 truncate">
+                          <Briefcase className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
                           {app.jobTitle || 'General Opening'}
                         </span>
 
-                        <div className="mt-3 pt-2 border-t border-slate-900 flex items-center justify-between">
-                          <span className="text-[10px] text-slate-500">
+                        <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-900 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">
                             {new Date(app.createdAt).toLocaleDateString()}
                           </span>
                           <button
@@ -253,7 +253,7 @@ export const ApplicationsPage: React.FC = () => {
                               setTransitionApp(app);
                               setTargetStage(col.id === 'APPLIED' ? 'SCREENING' : 'INTERVIEW');
                             }}
-                            className="text-[11px] text-emerald-400 hover:underline flex items-center gap-0.5"
+                            className="text-[11px] text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-0.5"
                           >
                             <span>Move</span>
                             <ChevronRight className="w-3 h-3" />
@@ -269,10 +269,10 @@ export const ApplicationsPage: React.FC = () => {
         </div>
       ) : (
         /* Tabular List View */
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+              <tr className="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
                 <th className="py-3.5 px-5">Candidate</th>
                 <th className="py-3.5 px-4">Job Requisition</th>
                 <th className="py-3.5 px-4">Stage</th>
@@ -280,7 +280,7 @@ export const ApplicationsPage: React.FC = () => {
                 <th className="py-3.5 px-5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {applications.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-16 text-center text-slate-500">
@@ -289,11 +289,11 @@ export const ApplicationsPage: React.FC = () => {
                 </tr>
               ) : (
                 applications.map((app) => (
-                  <tr key={app.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-5 font-semibold text-white">
+                  <tr key={app.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3.5 px-5 font-semibold text-slate-900 dark:text-white">
                       {app.candidateName || 'Applicant'}
                     </td>
-                    <td className="py-3.5 px-4 text-slate-300">
+                    <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300">
                       {app.jobTitle || 'General Opening'}
                     </td>
                     <td className="py-3.5 px-4">
@@ -301,7 +301,7 @@ export const ApplicationsPage: React.FC = () => {
                         {normalizeStage(app.currentStage)}
                       </Badge>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px]">
+                    <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
                       {new Date(app.createdAt).toLocaleDateString()}
                     </td>
                     <td className="py-3.5 px-5 text-right space-x-2">
@@ -410,25 +410,25 @@ export const ApplicationsPage: React.FC = () => {
                 No intermediate stage transitions recorded for this application.
               </div>
             ) : (
-              <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
+              <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-800">
                 {historyList.map((h, i) => (
                   <div key={h.id || i} className="relative">
-                    <span className="absolute -left-6 top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-slate-900" />
-                    <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs">
+                    <span className="absolute -left-6 top-1 w-2.5 h-2.5 rounded-full bg-teal-500 ring-4 ring-white dark:ring-slate-900" />
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-white">
-                          {h.fromStage} → <span className="text-emerald-400">{h.toStage}</span>
+                        <span className="font-semibold text-slate-900 dark:text-white">
+                          {h.fromStage} → <span className="text-teal-600 dark:text-teal-400">{h.toStage}</span>
                         </span>
                         <span className="text-[10px] text-slate-500 font-mono">
                           {new Date(h.createdAt).toLocaleString()}
                         </span>
                       </div>
                       {h.note && (
-                        <p className="text-slate-400 text-[11px] mt-1.5 bg-slate-900/50 p-2 rounded">
+                        <p className="text-slate-600 dark:text-slate-400 text-[11px] mt-1.5 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-850 p-2 rounded">
                           "{h.note}"
                         </p>
                       )}
-                      <span className="text-[10px] text-slate-600 block mt-1">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
                         Recorded by: {h.changedBy || 'System / HR Recruiter'}
                       </span>
                     </div>
@@ -449,13 +449,13 @@ export const ApplicationsPage: React.FC = () => {
       >
         <form onSubmit={handleCreateApplication} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Select Candidate *
             </label>
             <select
               value={selectedCandidateId}
               onChange={(e) => setSelectedCandidateId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               required
             >
               <option value="">-- Choose Candidate --</option>
@@ -468,13 +468,13 @@ export const ApplicationsPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Select Target Job *
             </label>
             <select
               value={selectedJobId}
               onChange={(e) => setSelectedJobId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               required
             >
               <option value="">-- Choose Job Opening --</option>

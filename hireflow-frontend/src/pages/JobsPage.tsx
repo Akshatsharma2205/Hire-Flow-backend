@@ -139,8 +139,8 @@ export const JobsPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Job Openings & Requisitions</h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Job Openings & Requisitions</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Manage organization roles, revision histories, and 60/20/20 candidate matching.
           </p>
         </div>
@@ -161,10 +161,10 @@ export const JobsPage: React.FC = () => {
           Loading active requisitions...
         </div>
       ) : jobs.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center">
-          <Briefcase className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-sm font-semibold text-white">No Open Positions</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center shadow-sm">
+          <Briefcase className="w-10 h-10 text-slate-400 dark:text-slate-600 mx-auto mb-3" />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">No Open Positions</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
             Get started by posting your first job description to begin receiving candidates.
           </p>
           <Button
@@ -181,7 +181,7 @@ export const JobsPage: React.FC = () => {
           {jobs.map((job) => (
             <div
               key={job.id}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition-colors shadow-lg"
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-sm hover:shadow-md"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
@@ -190,34 +190,34 @@ export const JobsPage: React.FC = () => {
                   </Badge>
                   <button
                     onClick={() => handleToggleStatus(job)}
-                    className="text-[11px] text-slate-400 hover:text-white transition-colors"
+                    className="text-[11px] text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
                   >
                     {job.status === 'ACTIVE' ? 'Close' : 'Reopen'}
                   </button>
                 </div>
 
-                <h3 className="text-base font-bold text-white mt-3 leading-snug line-clamp-1">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white mt-3 leading-snug line-clamp-1">
                   {job.title}
                 </h3>
 
-                <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-400">
+                <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500 dark:text-slate-400">
                   <span className="flex items-center gap-1">
-                    <Building className="w-3.5 h-3.5 text-slate-500" />
+                    <Building className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                     {job.department || 'Engineering'}
                   </span>
                   <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                     {job.location || 'Remote'}
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-400 mt-3 line-clamp-2 leading-relaxed">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 line-clamp-2 leading-relaxed">
                   {job.description || job.rawJobDescription || 'Full-cycle engineering recruitment role.'}
                 </p>
 
-                <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
                   <span className="flex items-center gap-1">
-                    <Layers className="w-3.5 h-3.5 text-slate-500" />
+                    <Layers className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                     {job.versionCount || 1} revision(s)
                   </span>
                   <button
@@ -225,14 +225,14 @@ export const JobsPage: React.FC = () => {
                       setRevisionJob(job);
                       setRevisionDesc(job.description || '');
                     }}
-                    className="text-emerald-400 hover:underline"
+                    className="text-teal-600 dark:text-teal-400 hover:underline"
                   >
                     Update Requirements
                   </button>
                 </div>
               </div>
 
-              <div className="mt-5 pt-3 border-t border-slate-800">
+              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <Button
                   variant="outline"
                   size="sm"
@@ -240,10 +240,10 @@ export const JobsPage: React.FC = () => {
                   onClick={() => handleOpenMatches(job)}
                 >
                   <span className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                     Candidate Matches
                   </span>
-                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
                 </Button>
               </div>
             </div>
@@ -261,7 +261,7 @@ export const JobsPage: React.FC = () => {
       >
         <form onSubmit={handleCreateJob} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Job Title *
             </label>
             <input
@@ -269,14 +269,14 @@ export const JobsPage: React.FC = () => {
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               placeholder="e.g. Lead Distributed Systems Engineer"
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               required
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Department
               </label>
               <input
@@ -284,11 +284,11 @@ export const JobsPage: React.FC = () => {
                 value={newDepartment}
                 onChange={(e) => setNewDepartment(e.target.value)}
                 placeholder="e.g. Core Platform"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Location
               </label>
               <input
@@ -296,38 +296,38 @@ export const JobsPage: React.FC = () => {
                 value={newLocation}
                 onChange={(e) => setNewLocation(e.target.value)}
                 placeholder="e.g. Bengaluru / Hybrid"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Min Experience (Months)
               </label>
               <input
                 type="number"
                 value={newMinExp}
                 onChange={(e) => setNewMinExp(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Max Experience (Months)
               </label>
               <input
                 type="number"
                 value={newMaxExp}
                 onChange={(e) => setNewMaxExp(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Job Description & Skill Requirements *
             </label>
             <textarea
@@ -335,7 +335,7 @@ export const JobsPage: React.FC = () => {
               onChange={(e) => setNewDescription(e.target.value)}
               placeholder="Paste raw requisition or required tech stack (Java, Spring Boot, Postgres, Kafka...)"
               rows={6}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 leading-relaxed font-mono"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400 leading-relaxed font-mono"
               required
             />
           </div>
@@ -372,14 +372,14 @@ export const JobsPage: React.FC = () => {
         >
           <form onSubmit={handleCreateRevision} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Updated Job Description
               </label>
               <textarea
                 value={revisionDesc}
                 onChange={(e) => setRevisionDesc(e.target.value)}
                 rows={8}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 font-mono leading-relaxed"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-600 dark:focus:border-teal-400 font-mono leading-relaxed"
                 required
               />
             </div>
@@ -420,7 +420,7 @@ export const JobsPage: React.FC = () => {
           </div>
         ) : matches.length === 0 ? (
           <div className="py-16 text-center text-slate-500 text-xs">
-            <Sparkles className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+            <Sparkles className="w-8 h-8 text-slate-400 dark:text-slate-600 mx-auto mb-2" />
             No matching candidates found for this role yet.
           </div>
         ) : (
@@ -428,15 +428,15 @@ export const JobsPage: React.FC = () => {
             {matches.map((m, idx) => (
               <div
                 key={m.candidateId || idx}
-                className="p-4 bg-slate-950 border border-slate-800 rounded-xl hover:border-slate-700 transition-colors"
+                className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-400 font-bold text-xs flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-400 font-bold text-xs flex items-center justify-center">
                       #{idx + 1}
                     </div>
                     <div>
-                      <h4 className="font-semibold text-white text-xs">{m.candidateName}</h4>
+                      <h4 className="font-semibold text-slate-900 dark:text-white text-xs">{m.candidateName}</h4>
                       <span className="text-[11px] text-slate-500">{m.candidateEmail}</span>
                     </div>
                   </div>
@@ -449,18 +449,18 @@ export const JobsPage: React.FC = () => {
                 </div>
 
                 {/* Score Breakdown Bars */}
-                <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-900 text-[11px]">
+                <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-slate-900 text-[11px]">
                   <div>
                     <span className="text-slate-500 block text-[10px]">Skills (60%)</span>
-                    <span className="text-slate-200 font-semibold">{m.skillScore ?? '—'}%</span>
+                    <span className="text-slate-800 dark:text-slate-200 font-semibold">{m.skillScore ?? '—'}%</span>
                   </div>
                   <div>
                     <span className="text-slate-500 block text-[10px]">Exp (20%)</span>
-                    <span className="text-slate-200 font-semibold">{m.experienceScore ?? '—'}%</span>
+                    <span className="text-slate-800 dark:text-slate-200 font-semibold">{m.experienceScore ?? '—'}%</span>
                   </div>
                   <div>
                     <span className="text-slate-500 block text-[10px]">Role (20%)</span>
-                    <span className="text-slate-200 font-semibold">{m.roleScore ?? '—'}%</span>
+                    <span className="text-slate-800 dark:text-slate-200 font-semibold">{m.roleScore ?? '—'}%</span>
                   </div>
                 </div>
 
@@ -470,7 +470,7 @@ export const JobsPage: React.FC = () => {
                     {m.matchingSkills.map((s, i) => (
                       <span
                         key={i}
-                        className="px-2 py-0.5 bg-emerald-950/40 border border-emerald-800/40 text-emerald-400 rounded text-[10px]"
+                        className="px-2 py-0.5 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/40 text-teal-700 dark:text-teal-400 rounded text-[10px]"
                       >
                         ✓ {s}
                       </span>

@@ -9,12 +9,11 @@ import {
   Cpu,
   AlertTriangle,
   Upload,
-  PlusCircle,
-  Sliders,
-  Check,
-  X,
   RefreshCw,
-  ExternalLink,
+  Activity,
+  ArrowRight,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { HealthMetrics, ReviewCase } from '../types';
@@ -110,13 +109,18 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+  const queueDepth = metrics?.queueDepth ?? 0;
+  const isQueueEmpty = queueDepth === 0;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Top Welcome & Quick Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Recruitment Operations</h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Recruitment Operations
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Real-time pipeline telemetry, mailbox synchronization, and identity resolution.
           </p>
         </div>
@@ -143,140 +147,175 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* KPI Cards Grid with Visual Hierarchy */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {/* Total Candidates */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors">
+        {/* Total Candidates (Teal Brand Accent) */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-teal-600 dark:border-l-teal-400 p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Total Candidates</span>
-            <div className="p-2 rounded-xl bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Total Candidates</span>
+            <div className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/60 dark:text-teal-400 dark:border-teal-800/60">
               <Users className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-2xl font-bold text-white tracking-tight">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               {metrics ? metrics.totalCandidates.toLocaleString() : '—'}
             </span>
-            <span className="text-[11px] text-slate-500 block mt-0.5">Resolved profiles</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+              Resolved profiles
+            </span>
           </div>
         </div>
 
-        {/* Total Resume Files */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors">
+        {/* Total Resume Files (Slate / Neutral Tone) */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Resume Files</span>
-            <div className="p-2 rounded-xl bg-slate-800 text-slate-300 border border-slate-700">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Resume Files</span>
+            <div className="p-2 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
               <FileText className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-2xl font-bold text-white tracking-tight">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               {metrics ? metrics.totalResumeFiles.toLocaleString() : '—'}
             </span>
-            <span className="text-[11px] text-slate-500 block mt-0.5">Ingested attachments</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+              Ingested attachments
+            </span>
           </div>
         </div>
 
-        {/* Ingestion Queue Depth */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors">
+        {/* Ingestion Queue Depth (Dynamic Amber > 0, Emerald == 0) */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Queue Depth</span>
-            <div className="p-2 rounded-xl bg-amber-950/60 text-amber-400 border border-amber-800/60">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Queue Depth</span>
+            <div
+              className={`p-2 rounded-xl border ${
+                isQueueEmpty
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/60'
+                  : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800/60'
+              }`}
+            >
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-2xl font-bold text-amber-400 tracking-tight">
+            <span
+              className={`text-2xl font-bold tracking-tight ${
+                isQueueEmpty
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-amber-600 dark:text-amber-400'
+              }`}
+            >
               {metrics ? metrics.queueDepth.toLocaleString() : '—'}
             </span>
-            <span className="text-[11px] text-slate-500 block mt-0.5">Pending extraction</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+              {isQueueEmpty ? 'Queue cleared' : 'Pending extraction'}
+            </span>
           </div>
         </div>
 
-        {/* Processed Resumes */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors">
+        {/* Processed Resumes (Emerald Success Indicator) */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Processed</span>
-            <div className="p-2 rounded-xl bg-cyan-950/60 text-cyan-400 border border-cyan-800/60">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Processed</span>
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/60">
               <CheckCircle className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-2xl font-bold text-white tracking-tight">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               {metrics ? metrics.processedCount.toLocaleString() : '—'}
             </span>
-            <span className="text-[11px] text-slate-500 block mt-0.5">Successfully parsed</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+              Successfully parsed
+            </span>
           </div>
         </div>
 
-        {/* Active Inboxes */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors">
+        {/* Active Inboxes (Indigo Accent) */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">Active Inboxes</span>
-            <div className="p-2 rounded-xl bg-indigo-950/60 text-indigo-400 border border-indigo-800/60">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Active Inboxes</span>
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-800/60">
               <Inbox className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-2xl font-bold text-white tracking-tight">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               {metrics ? metrics.activeMailConnections.toLocaleString() : '—'}
             </span>
-            <span className="text-[11px] text-slate-500 block mt-0.5">OAuth & IMAP</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+              OAuth & IMAP sync
+            </span>
           </div>
         </div>
 
-        {/* AI Token Spend */}
-        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-700 transition-colors">
+        {/* AI Token Spend (Purple Accent) */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400">AI Token Usage</span>
-            <div className="p-2 rounded-xl bg-slate-800 text-slate-300 border border-slate-700">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">AI Token Usage</span>
+            <div className="p-2 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/60 dark:text-purple-400 dark:border-purple-800/60">
               <Cpu className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-2xl font-bold text-white tracking-tight">
+            <span className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
               {metrics ? metrics.aiTokenSpend.toLocaleString() : '0'}
             </span>
-            <span className="text-[11px] text-slate-500 block mt-0.5">Tokens consumed</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+              Tokens consumed
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Review Cases & Quick Workflows Split */}
+      {/* Review Cases & Operational Insights Split */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Review Queue (2 Columns) */}
-        <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
-          <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
-              <h2 className="text-sm font-semibold text-white">Identity & Extraction Review Cases</h2>
+              <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                Identity & Extraction Review Cases
+              </h2>
             </div>
             <Badge variant={reviewCases.length > 0 ? 'amber' : 'slate'} size="sm">
               {reviewCases.length} Pending
             </Badge>
           </div>
 
-          <div className="divide-y divide-slate-800/60 flex-1 overflow-y-auto max-h-[380px]">
+          <div className="divide-y divide-slate-200 dark:divide-slate-800/60 flex-1 overflow-y-auto max-h-[380px]">
             {reviewCases.length === 0 ? (
-              <div className="py-12 px-4 text-center">
-                <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
-                <p className="text-xs font-medium text-slate-300">Review Queue Cleared</p>
-                <p className="text-[11px] text-slate-500 mt-1">
+              <div className="py-5 px-6 text-center">
+                <CheckCircle className="w-6 h-6 text-emerald-500 mx-auto mb-1.5 opacity-90" />
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Review Queue Cleared
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                   All candidate extractions and rule evaluations matched deterministically.
                 </p>
               </div>
             ) : (
               reviewCases.map((rc) => (
-                <div key={rc.id} className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors gap-4">
+                <div
+                  key={rc.id}
+                  className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors gap-4"
+                >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <Badge variant="amber" size="sm">
                         {rc.reasonCode}
                       </Badge>
-                      <span className="text-xs font-mono text-slate-500">{rc.id.slice(0, 8)}</span>
+                      <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                        {rc.id.slice(0, 8)}
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-300 mt-1.5 line-clamp-1">{rc.details || 'Identity conflict detected during candidate deduplication.'}</p>
-                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                    <p className="text-xs text-slate-700 dark:text-slate-300 mt-1.5 line-clamp-1">
+                      {rc.details || 'Identity conflict detected during candidate deduplication.'}
+                    </p>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">
                       Opened: {new Date(rc.createdAt).toLocaleString()}
                     </span>
                   </div>
@@ -294,76 +333,98 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Launch Cards (1 Column) */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-white mb-3">Quick Navigation</h2>
+        {/* Operational Insights Widgets (1 Column) */}
+        <div className="space-y-4">
+          {/* Ingestion Velocity & Pipeline Status Widget */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                Pipeline Velocity & Status
+              </h2>
+              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Telemetry
+              </span>
+            </div>
+
             <div className="space-y-2.5">
-              <button
-                onClick={() => navigate('/candidates')}
-                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-center justify-between text-left transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <Users className="w-4 h-4 text-emerald-400" />
-                  <div>
-                    <div className="text-xs font-medium text-slate-200 group-hover:text-white">Candidates Database</div>
-                    <div className="text-[11px] text-slate-500">Filter and view resume profiles</div>
-                  </div>
-                </div>
-                <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400" />
-              </button>
-
-              <button
-                onClick={() => navigate('/jobs')}
-                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-center justify-between text-left transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <PlusCircle className="w-4 h-4 text-cyan-400" />
-                  <div>
-                    <div className="text-xs font-medium text-slate-200 group-hover:text-white">Job Openings</div>
-                    <div className="text-[11px] text-slate-500">Post roles and inspect candidate matches</div>
-                  </div>
-                </div>
-                <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400" />
-              </button>
-
-              <button
-                onClick={() => navigate('/mailboxes')}
-                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-center justify-between text-left transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <Inbox className="w-4 h-4 text-indigo-400" />
-                  <div>
-                    <div className="text-xs font-medium text-slate-200 group-hover:text-white">Mailbox Sync Hub</div>
-                    <div className="text-[11px] text-slate-500">OAuth & Chrome Extension file intake</div>
-                  </div>
-                </div>
-                <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400" />
-              </button>
-
-              <button
-                onClick={() => navigate('/rules')}
-                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 flex items-center justify-between text-left transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <Sliders className="w-4 h-4 text-amber-400" />
-                  <div>
-                    <div className="text-xs font-medium text-slate-200 group-hover:text-white">Recruitment Rules</div>
-                    <div className="text-[11px] text-slate-500">Email filtering & rule preview simulator</div>
-                  </div>
-                </div>
-                <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400" />
-              </button>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-400">Active Workers</span>
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  {metrics?.runningCount ? `${metrics.runningCount} processing` : 'Idle (Ready)'}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-400">Extraction Failures</span>
+                <span
+                  className={`font-semibold ${
+                    (metrics?.failedCount ?? 0) > 0
+                      ? 'text-rose-600 dark:text-rose-400'
+                      : 'text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
+                  {metrics?.failedCount ?? 0} errors
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-400">Telemetry Sync</span>
+                <span className="font-semibold text-slate-900 dark:text-white">
+                  15s polling active
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-slate-800">
+          {/* Live Mailbox Health Widget */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                Live Mailbox Health
+              </h2>
+              <Badge variant="indigo" size="sm">
+                {metrics ? `${metrics.activeMailConnections} Active` : '0 Active'}
+              </Badge>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
+              Incremental sync running across Google Workspace and Microsoft 365 OAuth listeners.
+            </p>
             <button
-              onClick={() => navigate('/docs')}
-              className="w-full py-2 px-3 rounded-xl bg-emerald-950/40 border border-emerald-800/40 text-emerald-400 hover:bg-emerald-950/60 text-xs font-medium transition-colors flex items-center justify-center gap-2"
+              onClick={() => navigate('/mailboxes')}
+              className="w-full py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/40 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
             >
-              <span>Explore Technical Architecture Docs</span>
+              <span>Manage Mailbox Connections</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
+          </div>
+
+          {/* Quick Actions Panel */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              Quick Operations
+            </h2>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsUploadModalOpen(true)}
+                className="w-full justify-start text-xs"
+                icon={<Upload className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />}
+              >
+                Upload File
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate('/activity')}
+                className="w-full justify-start text-xs"
+                icon={<Activity className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
+              >
+                Inbound Logs
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -376,21 +437,25 @@ export const DashboardPage: React.FC = () => {
         subtitle="Upload candidate CVs in PDF or DOCX format for extraction"
       >
         <form onSubmit={handleUploadSubmit} className="space-y-4">
-          <div className="border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-xl p-8 text-center transition-colors bg-slate-950/50">
-            <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-            <p className="text-xs text-slate-300 font-medium">Select PDF or DOCX files</p>
-            <p className="text-[11px] text-slate-500 mt-1">Content-based MIME verified up to 25 MB</p>
+          <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-teal-500 dark:hover:border-teal-400 rounded-xl p-8 text-center transition-colors bg-slate-50/50 dark:bg-slate-950/50">
+            <Upload className="w-8 h-8 text-slate-400 dark:text-slate-500 mx-auto mb-2" />
+            <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+              Select PDF or DOCX files
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+              Content-based MIME verified up to 25 MB
+            </p>
             <input
               type="file"
               multiple
               accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={(e) => setUploadFiles(e.target.files)}
-              className="mt-4 block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+              className="mt-4 block w-full text-xs text-slate-600 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 dark:file:bg-slate-800 file:text-slate-700 dark:file:text-slate-200 hover:file:bg-slate-200 dark:hover:file:bg-slate-700 cursor-pointer"
             />
           </div>
 
           {uploadFiles && uploadFiles.length > 0 && (
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300">
               Selected <strong>{uploadFiles.length}</strong> file(s) for background extraction.
             </div>
           )}
@@ -425,19 +490,23 @@ export const DashboardPage: React.FC = () => {
           subtitle={`Case ID: ${selectedCase.id}`}
         >
           <div className="space-y-4">
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
-              <span className="text-[11px] text-slate-500 block">Conflict Description:</span>
-              <p className="text-xs text-slate-300 mt-1">{selectedCase.details || 'Reason code: ' + selectedCase.reasonCode}</p>
+            <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
+                Conflict Description:
+              </span>
+              <p className="text-xs text-slate-700 dark:text-slate-300 mt-1">
+                {selectedCase.details || 'Reason code: ' + selectedCase.reasonCode}
+              </p>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Resolution Action
               </label>
               <select
                 value={resolutionAction}
                 onChange={(e) => setResolutionAction(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 dark:focus:border-teal-400"
               >
                 <option value="MERGE">MERGE (Confirm candidate identity match)</option>
                 <option value="ASSIGN_JOB">ASSIGN_JOB (Explicitly map candidate to requisition)</option>
@@ -447,7 +516,7 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Recruiter Notes
               </label>
               <textarea
@@ -455,7 +524,7 @@ export const DashboardPage: React.FC = () => {
                 onChange={(e) => setResolutionNotes(e.target.value)}
                 placeholder="Audit notes for this resolution decision..."
                 rows={3}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-teal-500 dark:focus:border-teal-400"
               />
             </div>
 

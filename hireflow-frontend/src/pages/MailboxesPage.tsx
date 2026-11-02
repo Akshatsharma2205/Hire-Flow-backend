@@ -4,15 +4,11 @@ import {
   RefreshCw,
   Trash2,
   Key,
-  ShieldCheck,
-  CheckCircle2,
-  AlertTriangle,
+  RotateCcw,
   ChevronDown,
   ChevronUp,
   Copy,
-  Upload,
   Send,
-  Layers,
   Sparkles,
 } from 'lucide-react';
 import { api } from '../services/api';
@@ -235,8 +231,10 @@ export const MailboxesPage: React.FC = () => {
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Top Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Mailbox Integration & Intake</h1>
-        <p className="text-xs text-slate-400 mt-1">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          Mailbox Integration & Intake
+        </h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
           Connect corporate recruitment inboxes via OAuth 2.0 PKCE or manage browser extension tokens.
         </p>
       </div>
@@ -244,10 +242,10 @@ export const MailboxesPage: React.FC = () => {
       {/* Cloud OAuth Provider Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Google Workspace */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-slate-700 transition-colors shadow-lg">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors shadow-sm">
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center p-2 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-white border border-slate-200 dark:border-transparent flex items-center justify-center p-2 shrink-0">
                 <svg viewBox="0 0 24 24" className="w-full h-full">
                   <path
                     fill="#4285F4"
@@ -268,16 +266,18 @@ export const MailboxesPage: React.FC = () => {
                 </svg>
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Google Workspace</h3>
-                <span className="text-[11px] text-slate-400">Gmail API with incremental history ID sync</span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Google Workspace</h3>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Gmail API with incremental history ID sync
+                </span>
               </div>
             </div>
-            <p className="text-xs text-slate-400 mt-4 leading-relaxed">
-              Synchronize recruitment inboxes (e.g. <span className="font-mono text-slate-300">careers@yourdomain.com</span>). Automated token rotation and AES-256-GCM encrypted persistence.
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-4 leading-relaxed">
+              Synchronize recruitment inboxes (e.g. <span className="font-mono text-slate-800 dark:text-slate-200">careers@yourdomain.com</span>). Automated token rotation and AES-256-GCM encrypted persistence.
             </p>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-800">
+          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
             <Button
               variant="primary"
               size="sm"
@@ -290,10 +290,10 @@ export const MailboxesPage: React.FC = () => {
         </div>
 
         {/* Microsoft 365 */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-slate-700 transition-colors shadow-lg">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors shadow-sm">
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center p-2 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-2 shrink-0">
                 <svg viewBox="0 0 24 24" className="w-6 h-6">
                   <path fill="#f25022" d="M1 1h10v10H1z" />
                   <path fill="#7fba00" d="M13 1h10v10H13z" />
@@ -302,20 +302,22 @@ export const MailboxesPage: React.FC = () => {
                 </svg>
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Microsoft 365</h3>
-                <span className="text-[11px] text-slate-400">Microsoft Graph API with delta tokens</span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Microsoft 365</h3>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Microsoft Graph API with delta tokens
+                </span>
               </div>
             </div>
-            <p className="text-xs text-slate-400 mt-4 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-4 leading-relaxed">
               Connect Exchange Online / Outlook mailboxes. Supports shared folders, delta token paging, and automatic HTTP 429 backoff handling.
             </p>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-800">
+          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
             <Button
               variant="secondary"
               size="sm"
-              className="w-full text-white"
+              className="w-full text-slate-800 dark:text-white"
               onClick={() => handleOAuthConnect('microsoft')}
             >
               Connect Microsoft 365 Inbox
@@ -325,154 +327,194 @@ export const MailboxesPage: React.FC = () => {
       </div>
 
       {/* Active Mailbox Connections List */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+        <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Mail className="w-4 h-4 text-emerald-400" />
-            <h2 className="text-sm font-semibold text-white">Active Mailbox Connections</h2>
+            <Mail className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+              Active Mailbox Connections
+            </h2>
           </div>
           <Badge variant="slate" size="sm">
             {connections.length} Connected
           </Badge>
         </div>
 
-        <div className="divide-y divide-slate-800/60">
+        <div className="divide-y divide-slate-200 dark:divide-slate-800/60">
           {isLoading ? (
-            <div className="py-12 text-center text-slate-500 text-xs">
+            <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-xs">
               Loading mailbox integrations...
             </div>
           ) : connections.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-xs">
+            <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-xs">
               No mailboxes connected yet. Click Google Workspace or Microsoft 365 above.
             </div>
           ) : (
-            connections.map((conn) => (
-              <div
-                key={conn.id}
-                className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-800/30 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 shrink-0 font-bold text-xs">
-                    {conn.provider === 'GOOGLE' ? 'G' : conn.provider === 'MICROSOFT' ? 'M' : 'I'}
-                  </div>
-                  <div>
-                    <span className="font-semibold text-white text-xs block">
-                      {conn.emailAddress}
-                    </span>
-                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
-                      <span>Folder: <strong className="text-slate-400">{conn.folderFilter || 'INBOX'}</strong></span>
-                      <span>•</span>
-                      <span>
-                        Last synced:{' '}
-                        {conn.lastSyncAt ? new Date(conn.lastSyncAt).toLocaleTimeString() : 'Never'}
+            connections.map((conn) => {
+              const isReauth = conn.status === 'REAUTH';
+              return (
+                <div
+                  key={conn.id}
+                  className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-teal-700 dark:text-teal-400 shrink-0 font-bold text-xs">
+                      {conn.provider === 'GOOGLE' ? 'G' : conn.provider === 'MICROSOFT' ? 'M' : 'I'}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-900 dark:text-white text-xs block">
+                        {conn.emailAddress}
                       </span>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>
+                          Folder: <strong className="text-slate-700 dark:text-slate-300">{conn.folderFilter || 'INBOX'}</strong>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Last synced:{' '}
+                          {conn.lastSyncAt ? new Date(conn.lastSyncAt).toLocaleTimeString() : 'Never'}
+                        </span>
+                      </div>
                     </div>
                   </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-center">
+                    <Badge
+                      variant={conn.status === 'ACTIVE' ? 'emerald' : isReauth ? 'amber' : 'rose'}
+                      size="sm"
+                      dot
+                    >
+                      {conn.status}
+                    </Badge>
+
+                    {/* Inline Reauthorize Action for REAUTH Status */}
+                    {isReauth && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          handleOAuthConnect((conn.provider || 'google').toLowerCase() as 'google' | 'microsoft')
+                        }
+                        className="border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                        icon={<RotateCcw className="w-3.5 h-3.5" />}
+                      >
+                        Reauthorize
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      isLoading={syncingId === conn.id}
+                      onClick={() => handleSyncNow(conn.id)}
+                      icon={<RefreshCw className="w-3.5 h-3.5" />}
+                    >
+                      Sync Now
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDisconnect(conn.id, conn.emailAddress)}
+                      className="text-slate-400 hover:text-rose-600 dark:text-slate-500 dark:hover:text-rose-400"
+                      aria-label={`Disconnect ${conn.emailAddress}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
-
-                <div className="flex items-center gap-2 self-end sm:self-center">
-                  <Badge
-                    variant={conn.status === 'ACTIVE' ? 'emerald' : conn.status === 'REAUTH' ? 'amber' : 'rose'}
-                    size="sm"
-                    dot
-                  >
-                    {conn.status}
-                  </Badge>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    isLoading={syncingId === conn.id}
-                    onClick={() => handleSyncNow(conn.id)}
-                    icon={<RefreshCw className="w-3.5 h-3.5" />}
-                  >
-                    Sync Now
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDisconnect(conn.id, conn.emailAddress)}
-                    className="text-slate-500 hover:text-rose-400"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
 
-      {/* Legacy IMAP Form Accordion */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      {/* Custom IMAP / On-Premise Form Accordion */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <button
           onClick={() => setShowImapForm(!showImapForm)}
-          className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/40 transition-colors"
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
         >
           <div className="flex items-center gap-2">
-            <Key className="w-4 h-4 text-slate-400" />
-            <span className="text-xs font-semibold text-slate-200">
+            <Key className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
               Custom IMAP / On-Premise Mail Server Setup
             </span>
           </div>
-          {showImapForm ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          {showImapForm ? (
+            <ChevronUp className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+          )}
         </button>
 
         {showImapForm && (
-          <form onSubmit={handleCreateImap} className="p-5 border-t border-slate-800 space-y-4 bg-slate-950/40">
+          <form
+            onSubmit={handleCreateImap}
+            className="p-5 border-t border-slate-200 dark:border-slate-800 space-y-4 bg-slate-50/60 dark:bg-slate-950/40"
+          >
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">IMAP Host</label>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  IMAP Host
+                </label>
                 <input
                   type="text"
                   value={imapHost}
                   onChange={(e) => setImapHost(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 dark:focus:border-teal-400"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Port (SSL)</label>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  Port (SSL)
+                </label>
                 <input
                   type="number"
                   value={imapPort}
                   onChange={(e) => setImapPort(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 dark:focus:border-teal-400"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Folder Filter</label>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  Folder Filter
+                </label>
                 <input
                   type="text"
                   value={imapFolder}
                   onChange={(e) => setImapFolder(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 dark:focus:border-teal-400"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Username / Email</label>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  Username / Email
+                </label>
                 <input
                   type="text"
                   value={imapUsername}
                   onChange={(e) => setImapUsername(e.target.value)}
                   placeholder="careers@internal.company"
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 dark:focus:border-teal-400"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">App Password</label>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  App Password
+                </label>
                 <input
                   type="password"
                   value={imapPassword}
                   onChange={(e) => setImapPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 dark:focus:border-teal-400"
                   required
                 />
               </div>
@@ -488,14 +530,14 @@ export const MailboxesPage: React.FC = () => {
       </div>
 
       {/* Chrome Extension Intake Hub */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400" />
               Chrome Extension File Intake Hub
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               One-click ingestion from LinkedIn, Job Boards, or local files via the HireFlow Extension.
             </p>
           </div>
@@ -512,10 +554,14 @@ export const MailboxesPage: React.FC = () => {
         </div>
 
         {extensionToken && (
-          <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl mb-4 flex items-center justify-between">
+          <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl mb-4 flex items-center justify-between">
             <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Extension Bearer Token</span>
-              <span className="text-xs font-mono text-emerald-400 select-all">{extensionToken}</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider block font-medium">
+                Extension Bearer Token
+              </span>
+              <span className="text-xs font-mono text-teal-700 dark:text-teal-400 select-all font-semibold">
+                {extensionToken}
+              </span>
             </div>
             <Button
               variant="ghost"
@@ -524,6 +570,7 @@ export const MailboxesPage: React.FC = () => {
                 navigator.clipboard.writeText(extensionToken);
                 toast('Token copied to clipboard', 'success');
               }}
+              aria-label="Copy token"
             >
               <Copy className="w-3.5 h-3.5" />
             </Button>
@@ -531,33 +578,37 @@ export const MailboxesPage: React.FC = () => {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-4">
-          {/* SHA-256 Pre-check Simulator */}
-          <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-xs space-y-3">
-            <span className="font-semibold text-slate-200 block">1. SHA-256 Duplicate Pre-Check Tester</span>
+          {/* SHA-256 Pre-check Tester */}
+          <div className="p-4 bg-slate-50/70 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl text-xs space-y-3">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+              1. SHA-256 Duplicate Pre-Check Tester
+            </span>
             <input
               type="text"
               value={testHashInput}
               onChange={(e) => setTestHashInput(e.target.value)}
-              className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-300 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-300 focus:outline-none focus:border-teal-500 dark:focus:border-teal-400"
             />
             <Button variant="secondary" size="sm" onClick={handleCheckHashes}>
               Verify Hash In Repertoire
             </Button>
             {hashResult && (
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
+              <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300">
                 {hashResult}
               </div>
             )}
           </div>
 
           {/* Multipart Extension File Intake Tester */}
-          <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-xs space-y-3">
-            <span className="font-semibold text-slate-200 block">2. Extension Dispatch Simulator</span>
+          <div className="p-4 bg-slate-50/70 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl text-xs space-y-3">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+              2. Extension Dispatch Simulator
+            </span>
             <input
               type="file"
               accept=".pdf,.docx"
               onChange={(e) => setTestExtensionFile(e.target.files?.[0] || null)}
-              className="block w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-300"
+              className="block w-full text-xs text-slate-500 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-200 dark:file:bg-slate-800 file:text-slate-700 dark:file:text-slate-300"
             />
             <Button
               variant="primary"

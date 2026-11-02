@@ -41,10 +41,24 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(endpoint, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      ...options,
+      headers,
+    });
+  } catch (netErr: any) {
+    if (
+      netErr instanceof TypeError &&
+      (netErr.message === 'Failed to fetch' ||
+        netErr.message.toLowerCase().includes('failed to fetch') ||
+        netErr.message.toLowerCase().includes('networkerror') ||
+        netErr.message.toLowerCase().includes('network request failed'))
+    ) {
+      throw new Error('HireFlow backend is unreachable. Please verify the service is running on port 8080.');
+    }
+    throw netErr;
+  }
 
   if (response.status === 401) {
     if (onUnauthorizedCallback) {
@@ -73,6 +87,23 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
+  // System Health Probe (Spring Boot Actuator)
+  async getSystemHealth(): Promise<{ status: 'UP' | 'DOWN' | 'UNKNOWN' }> {
+    try {
+      const res = await fetch('/actuator/health');
+      if (!res.ok) {
+        return { status: 'DOWN' };
+      }
+      const data = await res.json().catch(() => null);
+      if (data && data.status === 'UP') {
+        return { status: 'UP' };
+      }
+      return { status: data?.status === 'DOWN' ? 'DOWN' : 'UNKNOWN' };
+    } catch {
+      return { status: 'DOWN' };
+    }
+  },
+
   // Auth
   async login(payload: { email: string; password: string }): Promise<AuthResponse> {
     const data = await request<AuthResponse>('/api/v1/auth/login', {

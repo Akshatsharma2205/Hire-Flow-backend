@@ -42,7 +42,7 @@ export const Drawer: React.FC<DrawerProps> = ({
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/70 backdrop-blur-sm transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -51,17 +51,17 @@ export const Drawer: React.FC<DrawerProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className={`w-screen ${widthClasses[width]} bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col`}
+          className={`w-screen ${widthClasses[width]} bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col`}
         >
           {/* Header */}
-          <div className="px-6 py-5 border-b border-slate-800 flex items-start justify-between bg-slate-900/90 backdrop-blur">
+          <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex items-start justify-between bg-white/95 dark:bg-slate-900/95 backdrop-blur">
             <div>
-              <h2 className="text-lg font-semibold text-white tracking-tight">{title}</h2>
-              {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight">{title}</h2>
+              {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{subtitle}</p>}
             </div>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               aria-label="Close drawer"
             >
               <X className="w-5 h-5" />

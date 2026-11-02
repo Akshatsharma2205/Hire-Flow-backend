@@ -77,9 +77,9 @@ export const DocsPage: React.FC = () => {
       const dataRows = rows.slice(2); // row 1 is separator |---|---|
 
       elements.push(
-        <div key={key} className="overflow-x-auto my-6 border border-slate-800 rounded-xl">
+        <div key={key} className="overflow-x-auto my-6 border border-slate-200 dark:border-slate-800 rounded-xl">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-900 border-b border-slate-800 text-slate-300 font-semibold">
+            <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold">
               <tr>
                 {headerRow.map((h, i) => (
                   <th key={i} className="py-2.5 px-4">
@@ -88,11 +88,11 @@ export const DocsPage: React.FC = () => {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-950/40">
               {dataRows.map((row, rIdx) => (
-                <tr key={rIdx} className="hover:bg-slate-900/30">
+                <tr key={rIdx} className="hover:bg-slate-50 dark:hover:bg-slate-900/30">
                   {row.map((cell, cIdx) => (
-                    <td key={cIdx} className="py-2 px-4 text-slate-300">
+                    <td key={cIdx} className="py-2 px-4 text-slate-700 dark:text-slate-300">
                       {cell}
                     </td>
                   ))}
@@ -112,17 +112,17 @@ export const DocsPage: React.FC = () => {
           const codeString = codeBuffer.join('\n');
           const currentCodeIdx = codeIndex++;
           elements.push(
-            <div key={`code-${idx}`} className="my-5 rounded-xl overflow-hidden border border-slate-800 bg-slate-950">
-              <div className="px-4 py-2 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+            <div key={`code-${idx}`} className="my-5 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+              <div className="px-4 py-2 bg-slate-100 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 font-mono">
                 <span>{codeBlockLang || 'text'}</span>
                 <button
                   onClick={() => handleCopyCode(codeString, currentCodeIdx)}
-                  className="flex items-center gap-1.5 text-slate-400 hover:text-white px-2 py-1 rounded hover:bg-slate-800 transition-colors"
+                  className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                 >
                   {copiedCodeIndex === currentCodeIdx ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">Copied</span>
+                      <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      <span className="text-teal-600 dark:text-teal-400">Copied</span>
                     </>
                   ) : (
                     <>
@@ -132,7 +132,7 @@ export const DocsPage: React.FC = () => {
                   )}
                 </button>
               </div>
-              <pre className="p-4 text-xs font-mono text-emerald-300 overflow-x-auto whitespace-pre leading-relaxed">
+              <pre className="p-4 text-xs font-mono text-teal-700 dark:text-teal-300 overflow-x-auto whitespace-pre leading-relaxed">
                 {codeString}
               </pre>
             </div>
@@ -162,7 +162,7 @@ export const DocsPage: React.FC = () => {
       // Headers
       if (line.startsWith('# ')) {
         elements.push(
-          <h1 key={idx} className="text-2xl font-bold text-white tracking-tight mt-8 mb-4 border-b border-slate-800 pb-3">
+          <h1 key={idx} className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight mt-8 mb-4 border-b border-slate-200 dark:border-slate-800 pb-3">
             {line.replace('# ', '')}
           </h1>
         );
@@ -170,7 +170,7 @@ export const DocsPage: React.FC = () => {
       }
       if (line.startsWith('## ')) {
         elements.push(
-          <h2 key={idx} className="text-lg font-bold text-slate-100 tracking-tight mt-6 mb-3">
+          <h2 key={idx} className="text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight mt-6 mb-3">
             {line.replace('## ', '')}
           </h2>
         );
@@ -178,7 +178,7 @@ export const DocsPage: React.FC = () => {
       }
       if (line.startsWith('### ')) {
         elements.push(
-          <h3 key={idx} className="text-sm font-semibold text-emerald-400 mt-5 mb-2">
+          <h3 key={idx} className="text-sm font-semibold text-teal-700 dark:text-teal-400 mt-5 mb-2">
             {line.replace('### ', '')}
           </h3>
         );
@@ -190,7 +190,7 @@ export const DocsPage: React.FC = () => {
         elements.push(
           <blockquote
             key={idx}
-            className="my-3 pl-4 border-l-2 border-emerald-500 text-slate-400 italic text-xs py-1 bg-slate-900/30 rounded-r-lg"
+            className="my-3 pl-4 border-l-2 border-teal-500 text-slate-600 dark:text-slate-400 italic text-xs py-1 bg-slate-50 dark:bg-slate-900/30 rounded-r-lg"
           >
             {line.replace('> ', '')}
           </blockquote>
@@ -200,14 +200,14 @@ export const DocsPage: React.FC = () => {
 
       // Horizontal Rule
       if (line.trim() === '---' || line.trim() === '***') {
-        elements.push(<hr key={idx} className="border-slate-800 my-6" />);
+        elements.push(<hr key={idx} className="border-slate-200 dark:border-slate-800 my-6" />);
         return;
       }
 
       // Bullet List
       if (line.startsWith('- ') || line.startsWith('* ')) {
         elements.push(
-          <li key={idx} className="text-xs text-slate-300 ml-4 list-disc my-1 leading-relaxed">
+          <li key={idx} className="text-xs text-slate-700 dark:text-slate-300 ml-4 list-disc my-1 leading-relaxed">
             {line.substring(2)}
           </li>
         );
@@ -221,7 +221,7 @@ export const DocsPage: React.FC = () => {
 
       // Regular Paragraph
       elements.push(
-        <p key={idx} className="text-xs text-slate-300 my-2 leading-relaxed">
+        <p key={idx} className="text-xs text-slate-700 dark:text-slate-300 my-2 leading-relaxed">
           {line}
         </p>
       );
@@ -240,21 +240,21 @@ export const DocsPage: React.FC = () => {
       <div className="w-full lg:w-72 shrink-0 space-y-4">
         {/* Search in Docs */}
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             type="text"
             value={searchFilter}
             onChange={(e) => setSearchFilter(e.target.value)}
             placeholder="Search documentation..."
-            className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400 shadow-sm"
           />
         </div>
 
         {/* Categories Accordion */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 divide-y divide-slate-800/80 shadow-lg">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 divide-y divide-slate-100 dark:divide-slate-800/80 shadow-sm dark:shadow-lg">
           {filteredCategories.map((cat, cIdx) => (
             <div key={cat.name} className={cIdx > 0 ? 'pt-3 mt-3' : ''}>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-2 block mb-1.5">
                 {cat.name}
               </span>
               <div className="space-y-0.5">
@@ -266,14 +266,14 @@ export const DocsPage: React.FC = () => {
                       onClick={() => setActiveArticleId(art.id)}
                       className={`w-full text-left px-3 py-2 rounded-xl text-xs transition-colors flex items-center justify-between group ${
                         isActive
-                          ? 'bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 font-semibold'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                          ? 'bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800/60 text-teal-800 dark:text-teal-300 font-semibold'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50'
                       }`}
                     >
                       <span className="truncate">{art.title}</span>
                       <ChevronRight
                         className={`w-3.5 h-3.5 shrink-0 transition-transform ${
-                          isActive ? 'text-emerald-400' : 'text-slate-600 group-hover:text-slate-400'
+                          isActive ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-400'
                         }`}
                       />
                     </button>
@@ -286,19 +286,19 @@ export const DocsPage: React.FC = () => {
       </div>
 
       {/* Main Documentation Viewer Canvas */}
-      <div className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl">
+      <div className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm dark:shadow-xl">
         {/* Document Header */}
-        <div className="border-b border-slate-800 pb-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="border-b border-slate-200 dark:border-slate-800 pb-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Badge variant="indigo" size="sm">
                 {activeArticle.category}
               </Badge>
-              <span className="text-slate-500 text-xs">•</span>
-              <span className="text-[11px] text-slate-400 font-mono">docs/{activeArticle.id}.md</span>
+              <span className="text-slate-400 dark:text-slate-500 text-xs">•</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">docs/{activeArticle.id}.md</span>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">{activeArticle.title}</h1>
-            <p className="text-xs text-slate-400 mt-1">{activeArticle.description}</p>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{activeArticle.title}</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{activeArticle.description}</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -317,7 +317,7 @@ export const DocsPage: React.FC = () => {
         </div>
 
         {/* Rendered Markdown Body */}
-        <article className="prose prose-invert max-w-none text-slate-300 text-xs">
+        <article className="prose prose-slate dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 text-xs">
           {renderMarkdown(activeArticle.content)}
         </article>
       </div>
