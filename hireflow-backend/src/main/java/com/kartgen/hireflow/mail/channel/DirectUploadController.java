@@ -32,6 +32,12 @@ public class DirectUploadController {
             @RequestParam(value = "jobId", required = false) UUID jobId
     ) {
         UUID orgId = TenantContext.getOrganizationId();
+        for (MultipartFile file : files) {
+            if (file.getSize() > 25L * 1024 * 1024) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE)
+                        .body(Map.of("error", "File exceeds maximum 25MB limit: " + file.getOriginalFilename()));
+            }
+        }
         try {
             List<UUID> accepted = ingestionService.ingestDirectUpload(orgId, files, sourceType, jobId);
             return ResponseEntity.accepted().body(Map.of(

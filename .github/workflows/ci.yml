@@ -45,6 +45,31 @@ jobs:
         run: |
           ./mvnw package -DskipTests --batch-mode
 
+  frontend-test:
+    name: Frontend Build & Test Suite (React 18 / Node.js 20)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies
+        working-directory: hireflow-frontend
+        run: npm ci || npm install
+
+      - name: Run Frontend Unit & Component Tests
+        working-directory: hireflow-frontend
+        run: npm test
+
+      - name: Build Frontend Production Assets
+        working-directory: hireflow-frontend
+        run: npm run build
+
   extension-test:
     name: Extension Test Suite (Node.js)
     runs-on: ubuntu-latest
@@ -115,3 +140,71 @@ jobs:
             fi
           done
           echo "All required documentation files present."
+
+  dependency-scan:
+    name: Automated Dependency Vulnerability Scan (Trivy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@v0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'json'
+          output: 'trivy-results.json'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Upload Vulnerability Scan Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-vulnerability-report
+          path: trivy-results.json
+
+  postgres-integration-test:
+    name: PostgreSQL Integration Tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: hireflow_test
+          POSTGRES_USER: hireflow_user
+          POSTGRES_PASSWORD: hireflow_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run PostgreSQL Integration Tests
+        working-directory: hireflow-backend
+        env:
+          SPRING_PROFILES_ACTIVE: postgres-test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: hireflow_test
+          DB_USERNAME: hireflow_user
+          DB_PASSWORD: hireflow_ci_password
+        run: |
+          sed -i 's/\r$//' mvnw || true
+          chmod +x mvnw
+          ./mvnw test -Dtest=PostgreSql*Test --batch-mode
+

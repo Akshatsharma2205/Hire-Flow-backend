@@ -20,8 +20,11 @@ public class InboundMessage {
     @Column(columnDefinition = "TEXT") private String subject;
     @Column(name = "job_id") private UUID jobId;
     @Column(name = "received_at") private Instant receivedAt;
-    @Column(name = "processing_status", nullable = false, length = 30) @Builder.Default private String processingStatus = "RECEIVED";
+    @Column(name = "processing_status", nullable = false, length = 30) @Builder.Default private String processingStatus = "DISCOVERED";
     @Column(name = "failure_code", length = 80) private String failureCode;
+    @Column(name = "matched_rule_id") private UUID matchedRuleId;
+    @Column(name = "rule_action", length = 50) private String ruleAction;
+    @Column(name = "rule_explanation", columnDefinition = "TEXT") private String ruleExplanation;
     @Column(name = "created_at", nullable = false, updatable = false) @Builder.Default private Instant createdAt = Instant.now();
 }
 

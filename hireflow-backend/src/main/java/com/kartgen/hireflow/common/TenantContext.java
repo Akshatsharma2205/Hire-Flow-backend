@@ -1,5 +1,7 @@
 package com.kartgen.hireflow.common;
 
+import org.slf4j.MDC;
+
 import java.util.UUID;
 
 /**
@@ -8,13 +10,21 @@ import java.util.UUID;
  */
 public final class TenantContext {
 
+    public static final String MDC_ORG_ID_KEY = "orgId";
     private static final ThreadLocal<UUID> ORG_ID = new ThreadLocal<>();
     private static final ThreadLocal<UUID> USER_ID = new ThreadLocal<>();
 
     private TenantContext() {}
 
     public static UUID getOrganizationId() { return ORG_ID.get(); }
-    public static void setOrganizationId(UUID orgId) { ORG_ID.set(orgId); }
+    public static void setOrganizationId(UUID orgId) {
+        ORG_ID.set(orgId);
+        if (orgId != null) {
+            MDC.put(MDC_ORG_ID_KEY, orgId.toString());
+        } else {
+            MDC.remove(MDC_ORG_ID_KEY);
+        }
+    }
 
     public static UUID getUserId() { return USER_ID.get(); }
     public static void setUserId(UUID userId) { USER_ID.set(userId); }
@@ -22,6 +32,7 @@ public final class TenantContext {
     public static void clear() {
         ORG_ID.remove();
         USER_ID.remove();
+        MDC.remove(MDC_ORG_ID_KEY);
     }
 }
 

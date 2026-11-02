@@ -63,7 +63,20 @@ public class SecurityConfig {
                     })
             )
             .authorizeHttpRequests(auth -> {
-                auth.requestMatchers("/", "/index.html", "/css/**", "/js/**", "/favicon.ico").permitAll();
+                auth.requestMatchers(
+                    "/", "/index.html", "/favicon.ico", "/vite.svg",
+                    "/assets/**", "/css/**", "/js/**",
+                    "/login", "/dashboard",
+                    "/candidates", "/candidates/**",
+                    "/jobs", "/jobs/**",
+                    "/applications", "/applications/**",
+                    "/mailboxes", "/mailboxes/**",
+                    "/rules", "/rules/**",
+                    "/activity", "/activity/**",
+                    "/settings", "/settings/**",
+                    "/docs", "/docs/**",
+                    "/{path:[^\\.]*}"
+                ).permitAll();
                 auth.requestMatchers("/api/v1/auth/**").permitAll();
                 auth.requestMatchers("/api/v1/local-s3/**").permitAll();
                 auth.requestMatchers("/api/v1/mail-webhook/**").permitAll(); // WebhookAuthFilter enforces secret

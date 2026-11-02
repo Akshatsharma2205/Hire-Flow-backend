@@ -1,39 +1,33 @@
-# TEST_INFRA.md — HireFlow OAuth E2E Test Infrastructure & Specification
+# TEST_INFRA.md — HireFlow Integrated Production Release E2E Test Infrastructure & Specification
 
 ## 1. Executive Summary & Testing Philosophy
 
-HireFlow implements backend-managed OAuth 2.0 authorization code flows for Google Workspace (Gmail) and Microsoft 365 (Microsoft Graph) mailboxes. Connecting a corporate mailbox grants automated ingestion capabilities for candidate resumes while safeguarding organizational secrets and enforcing strict multi-tenant boundaries.
+HireFlow is an intelligent, modular recruitment automation platform delivering mailbox-based candidate ingestion, configurable email rule evaluation, secure resume attachment extraction, identity deduplication, candidate matching, and an independent modern SaaS frontend.
 
-The testing infrastructure for HireFlow OAuth Mailbox Integration follows an **opaque-box, requirement-driven, 4-tier methodology**. Tests interact with the system strictly through its documented external interface contracts (HTTP REST APIs, database state validation, and mocked external provider boundaries), ensuring complete decoupling from implementation details.
+The testing infrastructure follows an **opaque-box, requirement-driven, 4-tier testing methodology**. Tests validate system behavior exclusively through its external interface contracts (HTTP REST APIs, database state validation, mock server boundaries, and synthetic document fixtures), completely independent of private implementation details.
 
 ### Core Testing Tenets
-1. **Opaque-Box Verification**: Exercise functionality through public API boundaries (`/api/v1/mail-connections/oauth/**` and `/api/v1/mail-connections/**`), evaluating HTTP response status codes, headers, response bodies, and encrypted persistence state.
-2. **Deterministic Mocking**: Isolate external OAuth 2.0 authorization servers and graph APIs (Google and Microsoft) using Spring's `MockRestServiceServer` or mock HTTP endpoints. Never execute unmocked calls across external networks during automated test runs.
-3. **Multi-Tenant Integrity**: Validate that authorization requests, state tokens, PKCE verifiers, and created connections strictly bind to the authenticated tenant and user, preventing cross-tenant leakage or session fixation.
-4. **Zero Secret Leakage**: Assert that authorization codes, plaintext access tokens, and refresh tokens are never exposed in log events, API responses, or stored in plaintext database columns.
-5. **Robust Replay and Failure Resistance**: Verify that single-use states cannot be replayed, expired tokens reject cleanly, provider errors are mapped to user-actionable diagnostics, and existing refresh tokens are preserved during reauthorization.
+1. **Opaque-Box Verification**: Exercise functionality through public API boundaries (`/api/v1/rules/**`, `/api/v1/mail-connections/**`, `/api/v1/operations/**`, `/api/v1/review-cases/**`, `/api/v1/uploads/**`, `/actuator/**`, and SPA frontend routes). Assert on HTTP status codes, headers, response JSON schemas, and database state.
+2. **Deterministic Network Isolation**: Mock external OAuth 2.0 authorization servers and provider APIs (Google Workspace Gmail API and Microsoft 365 Graph API) via an embedded in-memory HTTP server (`com.sun.net.httpserver.HttpServer`) bound to `127.0.0.1:0`. Zero unmocked WAN traffic is emitted during testing.
+3. **Multi-Tenant Security & Isolation**: Verify that rule creation, evaluation, mail synchronization, candidate records, and review cases strictly enforce tenant boundaries (`organizationId`), preventing cross-tenant leakage or privilege escalation.
+4. **Zero Fabrication & Truth In Extraction**: Validate that resume parsing, candidate identity resolution, and job associations reflect authentic extracted text and never fabricate candidate qualifications, contact details, or job history.
+5. **Progressive Testability & Graceful Degradation**: Structure tests across progressive milestones (M1 through M5). Tests for features under active implementation utilize dynamic capability detection to verify contracts as features land without false negative failures.
+6. **Zero Secret & Token Exposure**: Enforce that client secrets, refresh tokens, access tokens, and candidate PII never appear in log events, Actuator metric tags, or frontend payloads.
 
 ---
 
 ## 2. Feature Inventory & Test Mapping
 
-The test suite directly covers all inventoried OAuth features specified in `PROJECT.md`:
+The test suite directly covers all requirements R1 through R6 and Features 1–23 specified in `PROJECT.md` and `ORIGINAL_REQUEST.md`:
 
-| # | Feature Name | Description | Test Tier | Test Coverage Target |
-|---|--------------|-------------|-----------|----------------------|
-| 1 | Database Migration V5 | Flyway migration `V5__oauth_authorization_attempts.sql` table schema, constraints, and indices | Tier 1 & 2 | Attempt persistence, status transitions, TTL enforcement |
-| 2 | OAuth State Entity & Repository | `OAuthAuthorizationAttempt` entity, repository methods, and atomic status transitions | Tier 1 & 2 | Single-use consumption, lookup by state token |
-| 3 | OAuth Initiation Endpoint | `GET /api/v1/mail-connections/oauth/{provider}/authorize` generating state & PKCE | Tier 1 & 2 | Google & Microsoft auth URLs, PKCE code challenge, authentication check |
-| 4 | OAuth Callback & Token Exchange | `GET /api/v1/mail-connections/oauth/{provider}/callback` server-side exchange & profile resolution | Tier 1 & 2 | Token exchange, mailbox profile lookup, connection creation, postMessage response |
-| 5 | Refresh Token Preservation | Preserving existing valid refresh token when Google omits `refresh_token` on re-consent | Tier 3 | Reauthorization without `refresh_token` preserves previous secret |
-| 6 | Refresh Token Rotation in Sync | Persisting rotated refresh token during `OAuthMailSyncAdapter.syncConnection` | Tier 3 | Rotated refresh token stored encrypted in `oauth_secret_ref` |
-| 7 | SecurityConfig Public Callback | Public access (`permitAll`) for callback endpoints without breaking JWT filter | Tier 1 | Anonymous callback access succeeds without 401 |
-| 8 | Remove Manual Token Fields | Frontend removal of manual access/refresh token input fields | Tier 4 (Contract) | Backend rejects manual token inputs without OAuth flow |
-| 9 | One-Click Connect Buttons | Frontend popup and redirect initiation contracts | Tier 4 | PostMessage and redirect query parameters formatted for frontend consumption |
-| 10 | Reauthorization Alert & UX | `REAUTH` connection status propagation when tokens are revoked | Tier 3 & 4 | Sync failure transitions connection to `REAUTH` |
-| 11 | Engineering Documentation | Contract synchronization across architecture, security, and deployment guides | Tier 1–4 | Verifies conformance with documented endpoints and configuration keys |
-| 12 | Opaque-Box E2E Test Suite | Automated test harness in `OAuthMailConnectionE2ETest.java` | Tiers 1–4 | Automated execution via `mvn test` |
-| 13 | Final E2E Pass & Hardening | Regression protection and adversarial security verification | All Tiers | 100% test pass rate with zero flaky tests |
+| Feature Area | Req ID | Feature Inventory & Description | Test Tier | Primary Verification Channel |
+|--------------|--------|---------------------------------|-----------|-----------------------------|
+| **Rule Engine** | R1 | Email rule CRUD, prioritization, enable/disable, preview dry-run, deterministic evaluation, tenant isolation | T1, T2, T3, T4 | REST `/api/v1/rules/**`, `/api/v1/rules/preview` |
+| **Mailbox Sync** | R2 | Google/Microsoft/IMAP sync, cursor checkpointing, token rotation, HTTP 429 backoff, message lifecycle | T1, T2, T3, T4 | REST `/api/v1/mail-connections/**`, Mock OAuth Server |
+| **Attachment & AI** | R3 | Content-based MIME, 25MB limit, ZIP-bomb defense, identity deduplication, job link, review queue | T1, T2, T3, T4 | REST `/api/v1/uploads/**`, `/api/v1/review-cases/**` |
+| **Frontend & Docs** | R4 | Modern SPA forward routing, static asset serving, zero token exposure, docs viewer, genuine metrics | T1, T2, T3, T4 | HTTP GET `/`, `/assets/**`, `/docs/**`, `/api/v1/operations/**` |
+| **Tika & Security** | R5 | Tika >= 3.2.2 upgrade, XFA entity rejection, Billion Laughs expansion defense, external DTD denial, Trivy | T1, T2, T3, T4 | Synthetic PDF/XFA fixtures, CI workflow inspection |
+| **Observability** | R6 | `X-Correlation-ID` header, MDC propagation, Actuator health/metrics, PostgreSQL Flyway, HAT guide | T1, T2, T3, T4 | HTTP headers, `/actuator/**`, `docs/HUMAN_ACCEPTANCE_TESTING.md` |
 
 ---
 
@@ -42,281 +36,177 @@ The test suite directly covers all inventoried OAuth features specified in `PROJ
 The end-to-end integration test suite is structured into four distinct test tiers designed for progressive verification, diagnostic clarity, and complete coverage.
 
 ```
-+-------------------------------------------------------------------------+
-| Tier 4: Real-World Scenarios                                            |
-|   - Complete HR User Google Workspace Connection Lifecycle             |
-|   - Complete Enterprise Microsoft 365 Lifecycle (PKCE & Rotation)       |
-|   - Failed Provider Consent & User Recovery Workflow                    |
-|   - Token Revocation, REAUTH Detection & Self-Healing Reauthorization   |
-+-------------------------------------------------------------------------+
-                                    |
-+-------------------------------------------------------------------------+
-| Tier 3: Cross-Feature Combinations                                      |
-|   - Reauthorization with Refresh Token Preservation                     |
-|   - Rotated Refresh Token Persistence during Mailbox Synchronization    |
-|   - Duplicate Mailbox Upsertion & Conflict Resolution                   |
-|   - Expired Access Token Auto-Refresh During Sync                       |
-+-------------------------------------------------------------------------+
-                                    |
-+-------------------------------------------------------------------------+
-| Tier 2: Boundary & Corner Cases                                         |
-|   - Expired OAuth State Token Rejection                                 |
-|   - Replayed / Already-Consumed State Token Attack                      |
-|   - Tampered / Unknown State Token Rejection                            |
-|   - Tenant / Provider Mismatch Detection                                |
-|   - User Cancellation (`error=access_denied`) Graceful Handling         |
-|   - Provider Token Exchange Outage (HTTP 500 / 400)                     |
-|   - Provider Profile Fetch Failure (HTTP 401 / 404)                     |
-|   - Unsupported Provider Rejection (HTTP 400)                           |
-|   - Unauthenticated Initiation Rejection (HTTP 401)                     |
-+-------------------------------------------------------------------------+
-                                    |
-+-------------------------------------------------------------------------+
-| Tier 1: Feature Coverage (Happy Path)                                   |
-|   - Google Authorization URL Generation & State Binding                 |
-|   - Microsoft Authorization URL Generation with RFC 7636 PKCE S256      |
-|   - Google OAuth Callback Token Exchange & Mailbox Auto-Discovery       |
-|   - Microsoft OAuth Callback Token Exchange & UPN / Mail Fallback       |
-|   - Public Callback Endpoint (`permitAll`) Accessibility                |
-|   - HTML PostMessage Callback Payload & Redirect Fallback               |
-+-------------------------------------------------------------------------+
++---------------------------------------------------------------------------------------------------+
+| Tier 4: Real-World Application Scenarios (>= 5 Recruiter Workflows)                              |
+|   - Scenario 1: Complete Recruiter Mailbox Ingestion & Rule Pipeline (Gmail)                      |
+|   - Scenario 2: Multi-Attachment Forwarded Agency Batch Ingestion (Microsoft 365)                 |
+|   - Scenario 3: Adversarial / Malicious Attachment Attack & Quarantine (XXE + 30MB File)         |
+|   - Scenario 4: Ambiguous Job Mapping HR Review & Resolution Workflow                            |
+|   - Scenario 5: Mailbox Rate Limit Backoff & Self-Healing Reauthorization                         |
++---------------------------------------------------------------------------------------------------+
+                                                  |
++---------------------------------------------------------------------------------------------------+
+| Tier 3: Cross-Feature Combinations (Pairwise Coverage)                                            |
+|   - Pair 1: Mailbox Sync (R2) + Rule Engine Match (R1) + Job Association (R3)                    |
+|   - Pair 2: Mailbox Sync (R2) + Malicious Attachment Rejection (R3/R5) + Correlation (R6)        |
+|   - Pair 3: Rule Ambiguity (R1) + Candidate Deduplication (R3) + Review Case Routing (R3)        |
+|   - Pair 4: Token Rotation (R2) + Mailbox Sync (R2) + Observability Metrics (R6)                 |
+|   - Pair 5: Frontend SPA Forward (R4) + Actuator Health (R6) + Correlation ID Header (R6)        |
+|   - Pair 6: Rule Engine Evaluation (R1) + Multi-Tenant Isolation (R6)                            |
++---------------------------------------------------------------------------------------------------+
+                                                  |
++---------------------------------------------------------------------------------------------------+
+| Tier 2: Boundary & Corner Cases (Category-Partition & BVA — >= 5 per feature R1–R6 = 30 tests)   |
+|   - R1: Empty conditions, conflicting rules, regex special chars, tenant isolation, priority min/max|
+|   - R2: Expired cursor recovery, revoked token in sync, concurrent sync lock, max retries, empty box|
+|   - R3: >25MB file rejection, ZIP bomb rejection, missing contact info, ambiguous skills, corrupt PDF|
+|   - R4: Deep unknown route forward, path traversal block, malformed query params, 401 unauth, stress|
+|   - R5: Nested parameter entities, OOB SSRF block, huge XFA stream memory limit, bad PDF header   |
+|   - R6: Oversized correlation ID, CRLF injection in headers, concurrent MDC isolation, PII-free  |
++---------------------------------------------------------------------------------------------------+
+                                                  |
++---------------------------------------------------------------------------------------------------+
+| Tier 1: Feature Coverage (Happy Path — >= 5 per feature R1–R6 = 30 tests)                        |
+|   - R1: Rule CRUD, priority ordering, preview dry-run, enable/disable toggle, match explanation  |
+|   - R2: Initial sync cursor, incremental sync delta, idempotent deduplication, HTTP 429 backoff   |
+|   - R3: Valid PDF intake, MIME detection, candidate deduplication, job opening association, review|
+|   - R4: Client SPA routes forward to index.html, static assets serve, zero token exposure, docs  |
+|   - R5: Tika 3.2.2 text extraction, XFA XML defense, Billion Laughs defense, DTD block, Trivy CI |
+|   - R6: X-Correlation-ID echo/generation, Actuator health UP, Actuator metrics, HAT guide check |
++---------------------------------------------------------------------------------------------------+
 ```
 
 ---
 
-### Tier 1: Feature Coverage (Happy Path)
+## 4. Category-Partition & Boundary Value Analysis (BVA) Specification
 
-Tier 1 validates the baseline functional capabilities under standard operating conditions.
+### Feature R1: Recruitment Email Rule Engine
+- **Partition 1: Rule Conditions**:
+  - Valid: Sender domain matching (`*@recruiting.com`), subject keyword (`Senior Java Developer`), folder (`INBOX`).
+  - Boundary: Empty condition object `{}` (Rejected 400), regex metacharacters (`[Senior]+ (Java|Go)/*`).
+- **Partition 2: Priority**:
+  - Valid: Ascending integers `1, 2, 3...`
+  - Boundary: Priority 0, negative values, duplicate priorities, `Integer.MAX_VALUE`.
+- **Partition 3: Job Mapping**:
+  - Valid: Specific target `jobId` UUID.
+  - Ambiguous / Conflicting: Multiple rules matching with different target jobs -> routes to `IdentityReviewCase`.
+- **Partition 4: Multi-Tenant Boundary**:
+  - Tenant A accesses Tenant B's rule ID -> HTTP 404/403.
 
-#### Test Cases:
-1. **`testGoogleAuthorizationUrlGeneration_HappyPath`**:
-   - **Input**: Authenticated `GET /api/v1/mail-connections/oauth/google/authorize` with HR credentials.
-   - **Expected Output**: HTTP 200 OK containing JSON with `authorizationUrl` and `state`.
-   - **Assertions**:
-     - `authorizationUrl` points to `https://accounts.google.com/o/oauth2/v2/auth`.
-     - Parameters include: `client_id`, `redirect_uri`, `response_type=code`, `access_type=offline`, `prompt=consent`.
-     - Scope contains `https://www.googleapis.com/auth/gmail.readonly`.
-     - `state` parameter is cryptographically secure (>= 32 random characters), matching the returned `state` field.
-     - Database record created in `oauth_authorization_attempts` with status `PENDING`, matching `tenant_id` and `user_id`.
+### Feature R2: Mailbox Synchronization & Ingestion
+- **Partition 1: Sync Cursors**:
+  - Valid: Valid `historyId` (Google) / `deltaLink` (Microsoft).
+  - Boundary: Expired cursor -> graceful full re-sync without duplicate records.
+- **Partition 2: Rate Limiting & Backoff**:
+  - Normal: HTTP 200 OK with messages array.
+  - Boundary: HTTP 429 Too Many Requests -> exponential backoff header respected.
+- **Partition 3: Message Idempotency**:
+  - Unique message ID -> Ingested and lifecycle `DISCOVERED` -> `COMPLETED`.
+  - Re-synced identical message ID -> Skipped, 0 duplicates created.
+- **Partition 4: Retries**:
+  - Transient failure -> Retry count increments.
+  - Exceeds max retries (3) -> Lifecycle transitions to `FAILED`.
 
-2. **`testMicrosoftAuthorizationUrlGeneration_WithPkce_HappyPath`**:
-   - **Input**: Authenticated `GET /api/v1/mail-connections/oauth/microsoft/authorize`.
-   - **Expected Output**: HTTP 200 OK with `authorizationUrl` and `state`.
-   - **Assertions**:
-     - `authorizationUrl` points to `https://login.microsoftonline.com/common/oauth2/v2.0/authorize` (or configured tenant).
-     - Parameters include: `client_id`, `redirect_uri`, `response_type=code`, `response_mode=query`.
-     - Scope includes `offline_access`, `https://graph.microsoft.com/Mail.Read`, `User.Read`.
-     - PKCE parameters present: `code_challenge` and `code_challenge_method=S256`.
-     - Database record stores `code_verifier` corresponding to the SHA-256 base64url-encoded `code_challenge`.
+### Feature R3: Attachment Processing & Candidate Intelligence
+- **Partition 1: File Size**:
+  - Valid: 50KB to 24MB.
+  - Boundary: Exactly 25MB (accepted), 25MB + 1 byte (rejected with HTTP 413 / validation error).
+- **Partition 2: Archive / ZIP Bomb**:
+  - Valid: ZIP with 1–5 resume PDFs (<20MB total).
+  - Boundary: ZIP with >100 entries, high compression ratio (>100:1) -> rejected by Gatekeeper.
+- **Partition 3: MIME Inspection**:
+  - Valid: `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
+  - Malicious / Boundary: Executable script (`.sh`, `.exe`) disguised with `.pdf` extension -> rejected by magic bytes.
+- **Partition 4: Identity Resolution**:
+  - Unique email & phone -> New Candidate created.
+  - Identical email -> Merged into existing candidate, new `ResumeVersion` appended.
+  - Missing email and phone -> Routed to `IdentityReviewCase` (`MISSING_CONTACT_INFO`).
 
-3. **`testGoogleCallbackTokenExchange_HappyPath`**:
-   - **Input**: Public `GET /api/v1/mail-connections/oauth/google/callback?code=mock_google_code&state={validState}`.
-   - **Mock Setup**:
-     - Token endpoint `POST https://oauth2.googleapis.com/token` returns `{"access_token":"ya29.mock","refresh_token":"1//mock_refresh","expires_in":3599,"token_type":"Bearer"}`.
-     - Profile endpoint `GET https://gmail.googleapis.com/gmail/v1/users/me/profile` returns `{"emailAddress":"hr-lead@kartgen.com","historyId":"1001"}`.
-   - **Expected Output**: HTTP 200 OK returning HTML payload executing `window.opener.postMessage(...)` with `status: "SUCCESS"` and `mailboxAddress: "hr-lead@kartgen.com"`.
-   - **Assertions**:
-     - MailConnection created with `provider: "GMAIL_OAUTH"`, `mailbox_address: "hr-lead@kartgen.com"`, `status: "ACTIVE"`.
-     - Credentials in `oauth_secret_ref` are encrypted with AES-256-GCM.
-     - State attempt marked `CONSUMED`.
+### Feature R5: Apache Tika XXE & Parser Security
+- **Partition 1: Document Formats**:
+  - Standard PDF -> Extracted cleanly.
+  - PDF with embedded Adobe XFA XML form -> XFA processed safely with external entity resolution disabled.
+- **Partition 2: Entity Expansions**:
+  - Billion Laughs (`<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;">...`) -> Parser limits entity expansion safely without OOM.
+  - External System Entities (`SYSTEM "file:///etc/passwd"`, `SYSTEM "http://169.254.169.254/"`) -> Blocked without local file read or external network socket creation.
 
-4. **`testMicrosoftCallbackTokenExchange_WithMailboxDiscovery_HappyPath`**:
-   - **Input**: Public `GET /api/v1/mail-connections/oauth/microsoft/callback?code=mock_ms_code&state={validState}`.
-   - **Mock Setup**:
-     - Token endpoint `POST https://login.microsoftonline.com/common/oauth2/v2.0/token` validates `code_verifier` in request body and returns tokens.
-     - Profile endpoint `GET https://graph.microsoft.com/v1.0/me` returns `{"mail":"recruiting@kartgen.onmicrosoft.com","userPrincipalName":"recruiting@kartgen.com"}`.
-   - **Expected Output**: HTTP 200 OK returning HTML postMessage response.
-   - **Assertions**:
-     - MailConnection created with `provider: "MS_GRAPH_OAUTH"`, `mailbox_address: "recruiting@kartgen.onmicrosoft.com"`.
-     - Verified that PKCE `code_verifier` was passed in the POST request to Microsoft.
-
-5. **`testCallbackPublicAccess_NoAuthenticationHeaderRequired`**:
-   - **Input**: Callback request executed without `Authorization: Bearer <token>` header.
-   - **Expected Output**: Endpoint does not return HTTP 401/403; executes the OAuth validation logic cleanly.
-
----
-
-### Tier 2: Boundary & Corner Cases
-
-Tier 2 verifies system defense mechanisms against malformed inputs, race conditions, expired tokens, tampered state, and external service degradations.
-
-#### Test Cases:
-1. **`testCallbackRejection_ExpiredStateToken`**:
-   - **Setup**: `OAuthAuthorizationAttempt` with `expires_at` in the past (e.g., 10 minutes ago).
-   - **Input**: `GET /api/v1/mail-connections/oauth/google/callback?code=mock_code&state={expiredState}`.
-   - **Expected Output**: HTTP 200 HTML with `status: "ERROR"`, error message describing expired authorization session, or redirect to `/index.html?oauth=error`.
-   - **Assertions**: No token exchange attempted, no MailConnection created, attempt remains unconsumed or marked expired.
-
-2. **`testCallbackRejection_ReplayedStateToken`**:
-   - **Setup**: `OAuthAuthorizationAttempt` already marked `CONSUMED`.
-   - **Input**: Replayed callback request with same `state`.
-   - **Expected Output**: Callback rejected with error; token exchange not triggered.
-
-3. **`testCallbackRejection_UnknownOrTamperedState`**:
-   - **Input**: `GET /api/v1/mail-connections/oauth/google/callback?code=mock_code&state=tampered-or-unknown-uuid`.
-   - **Expected Output**: Rejection with invalid state error. Zero database mutations.
-
-4. **`testCallbackRejection_ProviderMismatch`**:
-   - **Setup**: State generated for Google provider (`provider = "google"`).
-   - **Input**: Callback sent to `/api/v1/mail-connections/oauth/microsoft/callback?code=mock_code&state={googleState}`.
-   - **Expected Output**: Rejection due to provider mismatch.
-
-5. **`testCallbackHandling_UserCancelledConsent`**:
-   - **Input**: `GET /api/v1/mail-connections/oauth/google/callback?error=access_denied&error_description=User+denied+access&state={validState}`.
-   - **Expected Output**: HTTP 200 HTML executing postMessage with `status: "ERROR"` and `error: "access_denied"`.
-   - **Assertions**: Attempt marked consumed or failed; zero exceptions thrown.
-
-6. **`testCallbackHandling_TokenEndpointHttp500Failure`**:
-   - **Setup**: Mock token endpoint returns HTTP 500 Internal Server Error.
-   - **Input**: Callback request with valid state and code.
-   - **Expected Output**: HTTP 200 HTML postMessage with `status: "ERROR"`. No MailConnection created.
-
-7. **`testCallbackHandling_ProfileEndpointFailure`**:
-   - **Setup**: Token exchange succeeds, but profile endpoint returns HTTP 404 or invalid JSON.
-   - **Input**: Callback request.
-   - **Expected Output**: Handled gracefully with error response.
-
-8. **`testInitiationRejection_UnauthenticatedUser`**:
-   - **Input**: `GET /api/v1/mail-connections/oauth/google/authorize` without Authorization header.
-   - **Expected Output**: HTTP 401 Unauthorized.
-
-9. **`testInitiationRejection_UnsupportedProvider`**:
-   - **Input**: `GET /api/v1/mail-connections/oauth/unsupported_provider/authorize`.
-   - **Expected Output**: HTTP 400 Bad Request.
+### Feature R6: Observability & Reliability
+- **Partition 1: Correlation ID**:
+  - Header present: `X-Correlation-ID: custom-trace-123` -> Echoed in response header, propagated to SLF4J MDC.
+  - Header absent: System generates random UUIDv4 and returns in response.
+  - Malformed / Injection: Header with `\r\n` or >100 characters sanitized.
 
 ---
 
-### Tier 3: Cross-Feature Combinations
+## 5. Pairwise Cross-Feature Combination Matrix (Tier 3)
 
-Tier 3 exercises interactions across multiple subsystems: OAuth flow, credential encryption, token rotation, and mailbox synchronization.
-
-#### Test Cases:
-1. **`testReauthorization_PreservesExistingRefreshToken_WhenGoogleOmitsIt`**:
-   - **Scenario**: An organization reconnects an existing Google mailbox. Google omits `refresh_token` because consent was previously granted.
-   - **Setup**: Existing `MailConnection` with encrypted credentials `{"accessToken":"old_access","refreshToken":"existing_valid_refresh_token","expiresAt":1000}`.
-   - **Action**: Execute callback for same mailbox address where Google token endpoint returns `{"access_token":"new_access","expires_in":3600}` (no `refresh_token`).
-   - **Expected Output & Verification**:
-     - Connection updated in database.
-     - Decrypted credentials contain `accessToken = "new_access"` and PRESERVE `refreshToken = "existing_valid_refresh_token"`.
-     - Connection status remains `ACTIVE`.
-
-2. **`testMailboxSync_HandlesTokenRefreshAndRotatedRefreshToken`**:
-   - **Scenario**: During scheduled or manual sync (`POST /api/v1/mail-connections/{id}/sync-now`), stored access token is expired.
-   - **Setup**: Connection credentials have expired `expiresAt`. Mock token refresh endpoint returns a new `access_token` and a rotated `refresh_token`. Mock mail API returns empty message list.
-   - **Action**: Invoke `POST /api/v1/mail-connections/{id}/sync-now`.
-   - **Expected Output & Verification**:
-     - Sync completes with status `ACTIVE`.
-     - Decrypted credentials in database reflect BOTH new access token and rotated refresh token.
-
-3. **`testMailboxSync_TransitionsToReauth_WhenTokenRevoked`**:
-   - **Scenario**: Provider returns HTTP 401 Unauthorized during token refresh or API call.
-   - **Action**: Trigger sync-now.
-   - **Expected Output & Verification**:
-     - Response indicates `status: "REAUTH"`.
-     - MailConnection in database has `status = "REAUTH"`.
-     - Subsequent sync attempts are blocked with clear instructions to re-authenticate.
-
-4. **`testDuplicateMailboxConnection_UpsertsExistingRecord`**:
-   - **Scenario**: Connecting an already connected mailbox address for the same organization.
-   - **Action**: Complete OAuth callback for the same mailbox address.
-   - **Expected Output & Verification**:
-     - Existing record is updated; no duplicate connection rows created.
-     - Unique constraint `(organization_id, provider, mailbox_address)` is maintained.
+| Test ID | Feature 1 | Feature 2 | Feature 3 | Interaction Under Test | Expected Observable Result |
+|---------|-----------|-----------|-----------|------------------------|---------------------------|
+| **P1** | R2 Mailbox Sync | R1 Rule Engine | R3 Candidate Link | Inbound email processed via active rule creates candidate & links job | Candidate persisted, Application created for target job, lifecycle `COMPLETED` |
+| **P2** | R2 Mailbox Sync | R3 Attachment | R6 Observability | Malicious or oversized attachment in synced email | Rejected by gatekeeper, security event logged with `X-Correlation-ID`, metrics incremented |
+| **P3** | R1 Rule Engine | R3 Candidate Deduplication | R3 Review Queue | Candidate matching conflicting rules for different job requisitions | Deduplicated candidate linked, `IdentityReviewCase` created (`AMBIGUOUS_JOB_MAPPING`) |
+| **P4** | R2 Mailbox Sync | R2 Token Rotation | R6 Metrics | Expired access token encountered during sync triggers rotation | Rotated refresh token stored encrypted, `hireflow.sync.duration` metric recorded |
+| **P5** | R4 Frontend SPA | R6 Observability | R6 Actuator | SPA route requested through `CorrelationIdFilter` | `X-Correlation-ID` header returned, Actuator health status remains UP |
+| **P6** | R1 Rule Engine | R6 Multi-Tenancy | R1 Rule Preview | Cross-tenant rule preview evaluation | Tenant A cannot view or evaluate Tenant B's recruitment rules (404/empty) |
 
 ---
 
-### Tier 4: Real-World Scenarios
+## 6. Real-World Recruiter Scenario Inventory (Tier 4)
 
-Tier 4 validates complete end-to-end user journeys simulating real-world enterprise operations.
-
-#### Test Scenarios:
-1. **Scenario 1: Complete Google Workspace HR Onboarding Lifecycle**:
-   - Step 1: HR Administrator initiates Google connection (`GET .../authorize`).
-   - Step 2: System yields authorization URL with required scopes (`gmail.readonly`, `offline_access`).
-   - Step 3: Provider callback executed (`GET .../callback`).
-   - Step 4: Mailbox discovered, connection established in `ACTIVE` state.
-   - Step 5: Connection listed in `GET /api/v1/mail-connections`.
-   - Step 6: HR triggers manual sync (`POST .../sync-now`). Mock messages and resumes ingested.
-   - Step 7: Connection verifies updated `lastSuccessAt`.
-   - Step 8: HR pauses connection (`DELETE .../{id}`). Status transitions to `PAUSED`.
-
-2. **Scenario 2: Complete Enterprise Microsoft 365 Lifecycle (PKCE & Rotation)**:
-   - Step 1: HR Administrator initiates Microsoft connection with PKCE S256 challenge.
-   - Step 2: System verifies `code_verifier` persists in attempt record.
-   - Step 3: Provider callback exchanges code and verifies `code_verifier` transmitted.
-   - Step 4: Discovers mailbox via `mail` or `userPrincipalName`.
-   - Step 5: Multi-page delta sync exercises token refresh with rotation.
-   - Step 6: Validates encrypted secret storage at rest.
-
-3. **Scenario 3: User Consent Denial & Self-Recovery**:
-   - Step 1: User clicks connect, but clicks "Cancel" on Google consent screen.
-   - Step 2: Callback receives `error=access_denied`.
-   - Step 3: UI receives actionable cancellation message. No connection created.
-   - Step 4: User immediately clicks connect again, grants consent, and successfully establishes connection.
-
-4. **Scenario 4: Token Revocation, REAUTH Detection, & Reauthorization**:
-   - Step 1: Active connection has token revoked by IT administrator in Microsoft 365 Admin Center.
-   - Step 2: HireFlow sync encounters 401/403 and marks connection `REAUTH`.
-   - Step 3: HR user initiates reauthorization flow.
-   - Step 4: Successful callback transitions connection back from `REAUTH` to `ACTIVE`.
+| Scenario ID | Name | Recruiter Workflow | Key Invariants Asserted |
+|-------------|------|--------------------|-------------------------|
+| **S1** | Recruiter Onboarding & Gmail Sync | 1. Recruiter logs in<br>2. Configures rule for "Senior Java Engineer"<br>3. Connects Gmail mailbox<br>4. Inbound resume email arrives<br>5. Sync triggers rule & extraction | Candidate created, application linked to target job, message lifecycle `COMPLETED`, trace ID in headers |
+| **S2** | Multi-Candidate Agency Forwarding | 1. Agency forwards batch email with 3 resumes<br>2. Ingestion parses each attachment independently<br>3. 1 new candidate, 1 duplicate candidate, 1 incomplete resume | Exactly 1 new candidate created, 1 duplicate candidate merged, 1 review case created (`MISSING_CONTACT_INFO`) |
+| **S3** | Malicious Attachment Defense | 1. Inbound email arrives with XFA XXE PDF and 30MB file<br>2. Pipeline security layers intercept<br>3. Rejection recorded | No external network calls, no OOM, file rejected, Actuator health remains UP |
+| **S4** | Ambiguous Job HR Review & Resolution | 1. Resume matches multiple requisitions equally<br>2. Rule engine creates review case<br>3. Recruiter reviews case via Operations API<br>4. Recruiter resolves and assigns job | Case created with `AMBIGUOUS_JOB_MAPPING`, resolved via `POST /api/v1/review-cases/{id}/resolve`, application finalized |
+| **S5** | Rate Limit Backoff & Reauth Healing | 1. Sync encounters HTTP 429 rate limit<br>2. Backoff applied<br>3. Subsequent 401 transitions connection to `REAUTH`<br>4. Reauthorization completes<br>5. Sync resumes from checkpoint | No dropped messages, status recovers to `ACTIVE`, incremental sync continues from persisted cursor |
 
 ---
 
-## 4. Mocking Strategy & Network Isolation
+## 7. Mock Infrastructure & Network Isolation
 
-### Technology Selection: `MockRestServiceServer`
-To ensure 100% network isolation, deterministic behavior, and zero dependencies on live external providers during CI/CD:
-- Spring Boot's `MockRestServiceServer` binds directly to the application's `RestTemplateBuilder` or `RestTemplate` beans.
-- For services creating internal `RestTemplate` instances (like `OAuthMailSyncAdapter`), a dedicated test configuration or reflection/spy mechanism intercepts outbound HTTP requests.
-- Requests matching Google (`https://oauth2.googleapis.com/**`, `https://gmail.googleapis.com/**`) and Microsoft (`https://login.microsoftonline.com/**`, `https://graph.microsoft.com/**`) are strictly intercepted.
-- Any unexpected external HTTP call causes an immediate test assertion failure.
+### Embedded Mock HTTP Server (`com.sun.net.httpserver.HttpServer`)
+- **Listen Address**: `127.0.0.1:0` (ephemeral port assigned by OS).
+- **Mock Contexts**:
+  - `/mock-oauth/google/token`: Google OAuth 2.0 token exchange & refresh.
+  - `/mock-oauth/gmail/users/me/profile`: Google user profile & history ID.
+  - `/mock-oauth/gmail/users/me/messages`: Google Gmail message listing & payload.
+  - `/mock-oauth/microsoft/token`: Microsoft Entra ID OAuth 2.0 token exchange with RFC 7636 PKCE.
+  - `/mock-oauth/graph/v1.0/me`: Microsoft Graph user profile & mailbox address.
+  - `/mock-oauth/graph/v1.0/me/mailFolders/inbox/messages`: Microsoft Graph message listing & delta link.
+- **Network Invariant**: Zero external internet calls. All HTTP clients in tests are configured with the local mock base URL.
 
 ---
 
-## 5. Execution & Verification Guide
+## 8. Quality Gates & Coverage Thresholds
 
-### Maven Test Invocations
-To run the full E2E OAuth test suite:
+| Quality Gate | Threshold | Verification Method |
+|--------------|-----------|---------------------|
+| **Compilation** | 0 compiler warnings/errors | `./mvnw.cmd test-compile` |
+| **Test Execution** | 100% pass of active milestones | `./mvnw.cmd test -Dtest=com.kartgen.hireflow.e2e.*` |
+| **Flakiness** | 0 flaky tests across 3 consecutive runs | Automated test execution |
+| **Secret Exposure** | 0 tokens/secrets in logs, responses, metrics | Regex assertion on logs & responses |
+| **Tenant Isolation** | 100% cross-tenant access rejection | Automated boundary tests |
+| **Tika CVE Remediation** | Tika version >= 3.2.2 | Maven dependency tree & XXE test fixtures |
+
+---
+
+## 9. Test Runner Commands
+
 ```bash
-# Run exclusively the OAuth Mail Connection E2E test suite
-./mvnw test -Dtest=OAuthMailConnectionE2ETest
+# Compile all backend test sources
+cd hireflow-backend
+./mvnw.cmd test-compile
 
-# Run targeted tier (using test method name pattern)
-./mvnw test -Dtest=OAuthMailConnectionE2ETest#testGoogle*
+# Run complete E2E test suite (Tiers 1–4 + Master Runner)
+./mvnw.cmd test -Dtest=com.kartgen.hireflow.e2e.*
 
-# Run full project regression suite
-./mvnw test
+# Run specific test tier
+./mvnw.cmd test -Dtest=Tier1FeatureCoverageE2ETest
+./mvnw.cmd test -Dtest=Tier2BoundaryCornerCaseE2ETest
+./mvnw.cmd test -Dtest=Tier3CrossFeaturePairwiseE2ETest
+./mvnw.cmd test -Dtest=Tier4RealWorldScenarioE2ETest
+
+# Run master runner harness
+./mvnw.cmd test -Dtest=HireFlowE2EMasterRunnerTest
 ```
-
-### Continuous Integration (CI) Quality Gates
-In `.github/workflows/ci.yml`, the test suite runs as part of the backend quality gate:
-- Java 21 LTS with Maven.
-- Active profile: `test`.
-- In-memory H2 in PostgreSQL compatibility mode.
-- Verification of zero secret leakage in test logs.
-
----
-
-## 6. Traceability Matrix
-
-| Requirement | Specification Section | Implemented Test Method |
-|-------------|-----------------------|-------------------------|
-| R1: Architecture Integration | PROJECT.md § Architecture | `testGoogleCallbackTokenExchange_HappyPath`, `testMailboxSync_HandlesTokenRefresh` |
-| R2: Google & Microsoft OAuth Flows | PROJECT.md § Feature Inventory (3, 4) | `testGoogleAuthorizationUrlGeneration_HappyPath`, `testMicrosoftAuthorizationUrlGeneration_WithPkce_HappyPath` |
-| R2: State Unpredictability & Single-Use | PROJECT.md § Acceptance Criteria | `testCallbackRejection_ExpiredStateToken`, `testCallbackRejection_ReplayedStateToken` |
-| R2: PKCE Verification (RFC 7636) | PROJECT.md § Feature Inventory (3, 4) | `testMicrosoftAuthorizationUrlGeneration_WithPkce_HappyPath`, `testMicrosoftCallbackTokenExchange_WithMailboxDiscovery_HappyPath` |
-| R2: Refresh Token Preservation | PROJECT.md § Feature Inventory (5) | `testReauthorization_PreservesExistingRefreshToken_WhenGoogleOmitsIt` |
-| R2: Provider Error Handling | PROJECT.md § Acceptance Criteria | `testCallbackHandling_UserCancelledConsent`, `testCallbackHandling_TokenEndpointHttp500Failure` |
-| R3: Frontend postMessage Contract | PROJECT.md § Backend OAuth Callback API | `testGoogleCallbackTokenExchange_HappyPath`, `testCallbackHandling_UserCancelledConsent` |
-| R4: Credential Encryption at Rest | PROJECT.md § Acceptance Criteria | `testGoogleCallbackTokenExchange_HappyPath`, `testReauthorization_PreservesExistingRefreshToken_WhenGoogleOmitsIt` |
-| R4: Tenant & User Isolation | PROJECT.md § Acceptance Criteria | `testCallbackRejection_TenantMismatch`, `testInitiationRejection_UnauthenticatedUser` |
-| R5: Sync Token Rotation | PROJECT.md § Feature Inventory (6) | `testMailboxSync_HandlesTokenRefreshAndRotatedRefreshToken` |
-
----
-
-## 7. Test Suite Status & Readiness Signal
-
-Once implementation of Milestone 1 (Backend OAuth Core) is active:
-1. `OAuthMailConnectionE2ETest.java` compiles cleanly.
-2. All test cases in Tiers 1 through 4 pass against the application endpoints.
-3. `TEST_READY.md` is authored and published to signal orchestrator and downstream verification agents.

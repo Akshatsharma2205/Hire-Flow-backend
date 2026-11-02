@@ -89,13 +89,19 @@ hireflow:
     batch-size: ${WORKER_BATCH_SIZE:10}
     stale-after-minutes: ${WORKER_STALE_MINUTES:10}
 
+logging:
+  pattern:
+    level: "%5p [corrId=%X{correlationId:-none} org=%X{orgId:-none}]"
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
   endpoint:
     health:
       probes:
         enabled: true
       show-details: when_authorized
+    metrics:
+      enabled: true

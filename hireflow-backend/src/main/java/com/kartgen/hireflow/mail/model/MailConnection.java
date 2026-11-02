@@ -21,6 +21,10 @@ public class MailConnection {
     @Column(name = "sync_cursor", columnDefinition = "TEXT") private String syncCursor;
     @Column(name = "last_success_at") private Instant lastSuccessAt;
     @Column(nullable = false, length = 30) @Builder.Default private String status = "ACTIVE";
+    @Column(name = "initial_sync_completed", nullable = false) @Builder.Default private Boolean initialSyncCompleted = false;
+    @Column(name = "consecutive_failures", nullable = false) @Builder.Default private Integer consecutiveFailures = 0;
+    @Column(name = "sync_status_details", columnDefinition = "TEXT") private String syncStatusDetails;
+    @Column(name = "last_attempt_at") private Instant lastAttemptAt;
     @Column(name = "created_by") private UUID createdBy;
     @Column(name = "created_at", nullable = false, updatable = false) @Builder.Default private Instant createdAt = Instant.now();
 }

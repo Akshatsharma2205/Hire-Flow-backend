@@ -4,9 +4,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const INDEX_HTML_PATH = path.resolve(__dirname, "../../main/resources/static/index.html");
+const MAILBOXES_PAGE_PATH = path.resolve(__dirname, "../../../../hireflow-frontend/src/pages/MailboxesPage.tsx");
 
 test("Static Analysis: index.html has zero plaintext tokens or secrets stored in DOM or client storage", () => {
     const htmlContent = fs.readFileSync(INDEX_HTML_PATH, "utf8");
+    const mailboxesContent = fs.existsSync(MAILBOXES_PAGE_PATH)
+        ? fs.readFileSync(MAILBOXES_PAGE_PATH, "utf8")
+        : htmlContent;
 
     // 1. Verify no localStorage or sessionStorage usage
     assert.strictEqual(
@@ -47,23 +51,23 @@ test("Static Analysis: index.html has zero plaintext tokens or secrets stored in
 
     // 4. Verify presence of postMessage origin validation in script
     assert.strictEqual(
-        htmlContent.includes("if (event.origin !== window.location.origin) return;"),
+        mailboxesContent.includes("if (event.origin !== window.location.origin) return;"),
         true,
-        "index.html must validate event.origin against window.location.origin"
+        "MailboxesPage must validate event.origin against window.location.origin"
     );
 
     // 5. Verify presence of popup block fallback
     assert.strictEqual(
-        htmlContent.includes("window.location.href = res.authorizationUrl;"),
+        mailboxesContent.includes("window.location.href = res.authorizationUrl;"),
         true,
-        "index.html must implement full-window redirect fallback if popup is blocked"
+        "MailboxesPage must implement full-window redirect fallback if popup is blocked"
     );
 
     // 6. Verify URL query cleanup via history.replaceState
     assert.strictEqual(
-        htmlContent.includes("window.history.replaceState({}, document.title, cleanUrl);"),
+        mailboxesContent.includes("window.history.replaceState({}, document.title, cleanUrl);"),
         true,
-        "index.html must strip oauth callback query parameters from history"
+        "MailboxesPage must strip oauth callback query parameters from history"
     );
 });
 

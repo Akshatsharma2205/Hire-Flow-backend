@@ -4,10 +4,12 @@ import com.kartgen.hireflow.identity.IdentityReviewCase;
 import com.kartgen.hireflow.identity.IdentityReviewCaseRepository;
 import com.kartgen.hireflow.mail.model.InboundAttachment;
 import com.kartgen.hireflow.mail.model.InboundAttachmentRepository;
+import com.kartgen.hireflow.mail.model.InboundMessageRepository;
 import com.kartgen.hireflow.mail.service.MessageIngestionService;
 import com.kartgen.hireflow.matching.MatchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,14 +24,37 @@ import java.util.UUID;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ProcessingWorker {
 
     private final ProcessingJobRepository jobRepo;
     private final InboundAttachmentRepository attachmentRepo;
+    private final InboundMessageRepository messageRepo;
     private final MessageIngestionService ingestionService;
     private final MatchService matchService;
     private final IdentityReviewCaseRepository reviewCaseRepo;
+
+    @Autowired
+    public ProcessingWorker(ProcessingJobRepository jobRepo,
+                            InboundAttachmentRepository attachmentRepo,
+                            InboundMessageRepository messageRepo,
+                            MessageIngestionService ingestionService,
+                            MatchService matchService,
+                            IdentityReviewCaseRepository reviewCaseRepo) {
+        this.jobRepo = jobRepo;
+        this.attachmentRepo = attachmentRepo;
+        this.messageRepo = messageRepo;
+        this.ingestionService = ingestionService;
+        this.matchService = matchService;
+        this.reviewCaseRepo = reviewCaseRepo;
+    }
+
+    public ProcessingWorker(ProcessingJobRepository jobRepo,
+                            InboundAttachmentRepository attachmentRepo,
+                            MessageIngestionService ingestionService,
+                            MatchService matchService,
+                            IdentityReviewCaseRepository reviewCaseRepo) {
+        this(jobRepo, attachmentRepo, null, ingestionService, matchService, reviewCaseRepo);
+    }
 
     public void execute(UUID jobId) {
         ProcessingJob job = jobRepo.findById(jobId).orElse(null);
@@ -122,6 +147,22 @@ public class ProcessingWorker {
                 .ifPresent(attachment -> {
                     attachment.setStatus("FAILED");
                     attachmentRepo.save(attachment);
+
+                    if (attachment.getMessageId() != null) {
+                        if (messageRepo != null) {
+                            messageRepo.findById(attachment.getMessageId()).ifPresent(message -> {
+                                if (!"REVIEW_REQUIRED".equals(message.getProcessingStatus())) {
+                                    message.setProcessingStatus("FAILED");
+                                    message.setFailureCode("PROCESSING_FAILED");
+                                    messageRepo.save(message);
+                                }
+                            });
+                        }
+
+                        if (ingestionService != null) {
+                            ingestionService.updateMessageStatus(attachment.getMessageId());
+                        }
+                    }
                 });
     }
 
