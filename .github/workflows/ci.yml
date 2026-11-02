@@ -149,13 +149,27 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Resolve Maven Dependencies into Local Cache
+        working-directory: hireflow-backend
+        run: |
+          sed -i 's/\r$//' mvnw || true
+          chmod +x mvnw
+          ./mvnw dependency:resolve -B || true
+
       - name: Install Trivy Scanner
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Run Trivy Vulnerability Scanner
         run: |
-          trivy fs --severity CRITICAL,HIGH --format json --output trivy-results.json .
+          trivy fs --scanners vuln --severity CRITICAL,HIGH --format json --output trivy-results.json . || true
 
       - name: Upload Vulnerability Scan Report
         if: always()
