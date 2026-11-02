@@ -4,47 +4,183 @@
 
 :root {
   color-scheme: light;
-  --scrollbar-track: rgba(241, 245, 249, 0.8);
-  --scrollbar-thumb: rgba(203, 213, 225, 0.9);
-  --scrollbar-thumb-hover: rgba(148, 163, 184, 1);
+  --scrollbar-track: rgba(243, 239, 231, 0.8);
+  --scrollbar-thumb: rgba(212, 203, 188, 0.9);
+  --scrollbar-thumb-hover: rgba(168, 157, 141, 1);
+  --focus-ring: rgba(36, 81, 62, 0.45);
 }
 
 html.dark {
   color-scheme: dark;
-  --scrollbar-track: rgba(15, 23, 42, 0.6);
-  --scrollbar-thumb: rgba(51, 65, 85, 0.8);
-  --scrollbar-thumb-hover: rgba(71, 85, 105, 1);
+  --scrollbar-track: rgba(18, 16, 14, 0.7);
+  --scrollbar-thumb: rgba(51, 46, 40, 0.9);
+  --scrollbar-thumb-hover: rgba(73, 66, 57, 1);
+  --focus-ring: rgba(134, 187, 159, 0.55);
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-[#F7F8FA] text-slate-900 dark:bg-[#0B1220] dark:text-slate-100 font-sans antialiased;
+    @apply bg-[#F7F4EE] text-slate-900 dark:bg-[#12100E] dark:text-slate-100 font-sans antialiased;
+    font-feature-settings: 'ss01' 1, 'cv11' 1;
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(1100px 520px at 50% -18%, rgba(183, 93, 58, 0.055), transparent 62%),
+      radial-gradient(900px 480px at 100% 0%, rgba(36, 81, 62, 0.05), transparent 58%);
+    background-repeat: no-repeat;
+  }
+
+  html.dark body {
+    background-image:
+      radial-gradient(1100px 520px at 50% -18%, rgba(223, 161, 132, 0.05), transparent 62%),
+      radial-gradient(900px 480px at 100% 0%, rgba(134, 187, 159, 0.04), transparent 58%);
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: rgba(183, 93, 58, 0.18);
+    color: #1F1C18;
+  }
+
+  html.dark ::selection {
+    background: rgba(223, 161, 132, 0.22);
+    color: #FAF8F3;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
-/* Tactile micro-interactions and smooth transitions */
-.card-hover {
-  @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md;
+@layer components {
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400;
+  }
+
+  .display {
+    @apply font-display font-normal tracking-[-0.03em];
+  }
+
+  .surface-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  }
+
+  .hairline {
+    @apply border-slate-200 dark:border-slate-800;
+  }
+
+  .field {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/15 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-teal-400 dark:focus:ring-teal-400/20;
+  }
+
+  .dot-grid {
+    background-image: radial-gradient(circle at 1px 1px, rgba(33, 30, 25, 0.12) 1px, transparent 0);
+    background-size: 26px 26px;
+  }
+
+  html.dark .dot-grid {
+    background-image: radial-gradient(circle at 1px 1px, rgba(250, 248, 243, 0.09) 1px, transparent 0);
+  }
+
+  .noise {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.42'/%3E%3C/svg%3E");
+  }
 }
 
-.card-interactive {
-  @apply transition-all duration-150 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm active:translate-y-0 active:scale-[0.99];
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Give the legacy `animate-in` utility classes real motion. */
+  .animate-in {
+    animation-duration: 0.24s;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    animation-fill-mode: both;
+  }
+
+  .fade-in {
+    animation-name: hf-fade-in;
+  }
+
+  .zoom-in-95 {
+    animation-name: hf-zoom-in;
+  }
+
+  .slide-in-from-right {
+    animation-name: hf-slide-in-right;
+  }
+
+  .slide-in-from-bottom-2 {
+    animation-name: hf-slide-in-up;
+  }
 }
 
-.focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900;
+@keyframes hf-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-/* Modern standard scrollbar support */
+@keyframes hf-zoom-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes hf-slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes hf-slide-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Smooth, restrained scrollbars. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
-/* Custom sleek webkit scrollbars for light and dark modes */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -58,4 +194,17 @@ html.dark {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
+}
+
+/* Tactile micro-interactions retained, now with the warmer shadow language. */
+.card-hover {
+  @apply transition-all duration-300 ease-out-expo hover:-translate-y-0.5 hover:shadow-md;
+}
+
+.card-interactive {
+  @apply transition-all duration-200 ease-out-expo hover:border-slate-300 hover:shadow-sm active:translate-y-0 active:scale-[0.995] dark:hover:border-slate-700;
+}
+
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-teal-600/30 focus:ring-offset-2 focus:ring-offset-[#F7F4EE] dark:focus:ring-teal-400/30 dark:focus:ring-offset-[#12100E];
 }

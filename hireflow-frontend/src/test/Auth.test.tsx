@@ -70,4 +70,33 @@ describe('Authentication & Login Page', () => {
       });
     });
   });
+
+  it('keeps the form available for an explicit account switch', async () => {
+    window.history.pushState({}, '', '/login?reauth=1');
+
+    vi.mocked(api.login).mockResolvedValue({
+      token: 'jwt-mock-existing-session',
+      email: 'hr@kartgen.com',
+      displayName: 'Kartgen HR Admin',
+      role: 'OWNER',
+      organizationId: '11111111-1111-1111-1111-111111111111',
+      organizationName: 'Kartgen Infotech LLP',
+    });
+
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <ToastProvider>
+            <LoginPage />
+          </ToastProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    expect(await screen.findByText(/Currently signed in as/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Sign in to/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /One-Click Demo Sign In/i })).toBeInTheDocument();
+
+    window.history.pushState({}, '', '/');
+  });
 });

@@ -150,8 +150,11 @@ export const CandidatesPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Candidates Intelligence</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <p className="eyebrow">Talent directory</p>
+          <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.03em] text-slate-950 dark:text-slate-50">
+            Candidate Intelligence
+          </h1>
+          <p className="mt-1.5 text-[12.5px] leading-6 text-slate-500 dark:text-slate-400">
             Living applicant profiles extracted across inbound mailboxes, referrals, and uploads.
           </p>
         </div>
@@ -236,7 +239,7 @@ export const CandidatesPage: React.FC = () => {
         <select
           value={selectedChannelFilter}
           onChange={(e) => setSelectedChannelFilter(e.target.value)}
-          className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-teal-600 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:focus:border-teal-400 sm:w-auto"
         >
           <option value="">All Source Channels</option>
           <option value="UPLOAD">Direct Upload</option>
@@ -249,7 +252,7 @@ export const CandidatesPage: React.FC = () => {
         <select
           value={selectedJobFilter}
           onChange={(e) => setSelectedJobFilter(e.target.value)}
-          className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-teal-600 dark:focus:border-teal-400"
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 focus:border-teal-600 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:focus:border-teal-400 sm:w-auto"
         >
           <option value="">All Job Requisitions</option>
           {jobs.map((j) => (
@@ -267,10 +270,10 @@ export const CandidatesPage: React.FC = () => {
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
                 <th className="py-3.5 px-5">Candidate</th>
-                <th className="py-3.5 px-4">Experience</th>
-                <th className="py-3.5 px-4">Primary Skills</th>
-                <th className="py-3.5 px-4">Channel</th>
-                <th className="py-3.5 px-4">Match %</th>
+                <th className="py-3.5 px-4 hidden sm:table-cell">Experience</th>
+                <th className="py-3.5 px-4 hidden md:table-cell">Primary Skills</th>
+                <th className="py-3.5 px-4 hidden sm:table-cell">Channel</th>
+                <th className="py-3.5 px-4 hidden sm:table-cell">Match %</th>
                 <th className="py-3.5 px-5 text-right">Action</th>
               </tr>
             </thead>
@@ -317,11 +320,11 @@ export const CandidatesPage: React.FC = () => {
                         </div>
                       </td>
 
-                      <td className="py-4 px-4 font-medium text-slate-700 dark:text-slate-300">
+                      <td className="py-4 px-4 hidden sm:table-cell font-medium text-slate-700 dark:text-slate-300">
                         {expYears}
                       </td>
 
-                      <td className="py-4 px-4">
+                      <td className="py-4 px-4 hidden md:table-cell">
                         <div className="flex flex-wrap gap-1 max-w-xs">
                           {cand.topSkills && cand.topSkills.length > 0 ? (
                             cand.topSkills.slice(0, 3).map((s, i) => (
@@ -338,13 +341,13 @@ export const CandidatesPage: React.FC = () => {
                         </div>
                       </td>
 
-                      <td className="py-4 px-4">
+                      <td className="py-4 px-4 hidden sm:table-cell">
                         <Badge variant="slate" size="sm">
                           {cand.sourceChannel || 'DIRECT'}
                         </Badge>
                       </td>
 
-                      <td className="py-4 px-4">
+                      <td className="py-4 px-4 hidden sm:table-cell">
                         {matchScore !== null ? (
                           <Badge
                             variant={matchScore >= 70 ? 'emerald' : matchScore >= 50 ? 'amber' : 'slate'}

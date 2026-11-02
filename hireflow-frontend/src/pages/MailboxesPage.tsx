@@ -231,10 +231,11 @@ export const MailboxesPage: React.FC = () => {
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Top Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-          Mailbox Integration & Intake
+        <p className="eyebrow">Integrations</p>
+        <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.03em] text-slate-950 dark:text-slate-50">
+          Mailbox Integration &amp; Intake
         </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+        <p className="mt-1.5 text-[12.5px] leading-6 text-slate-500 dark:text-slate-400">
           Connect corporate recruitment inboxes via OAuth 2.0 PKCE or manage browser extension tokens.
         </p>
       </div>
@@ -242,7 +243,7 @@ export const MailboxesPage: React.FC = () => {
       {/* Cloud OAuth Provider Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Google Workspace */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-t-4 border-t-teal-600 dark:border-t-teal-400 rounded-2xl p-6 flex flex-col justify-between shadow-sm card-hover transition-all">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col justify-between shadow-sm card-hover transition-all">
           <div>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-white border border-slate-200 dark:border-transparent flex items-center justify-center p-2 shrink-0">
@@ -290,7 +291,7 @@ export const MailboxesPage: React.FC = () => {
         </div>
 
         {/* Microsoft 365 */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-t-4 border-t-blue-600 dark:border-t-blue-500 rounded-2xl p-6 flex flex-col justify-between shadow-sm card-hover transition-all">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col justify-between shadow-sm card-hover transition-all">
           <div>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-2 shrink-0">

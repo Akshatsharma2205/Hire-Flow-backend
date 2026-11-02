@@ -4,6 +4,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './components/common/Toast';
 import { AppLayout } from './components/layout/AppLayout';
+import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { CandidatesPage } from './pages/CandidatesPage';
@@ -26,28 +27,31 @@ export const App: React.FC = () => {
       <ThemeProvider>
         <AuthProvider>
           <ToastProvider>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
+            <Routes>
+              {/* Public marketing surface */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
 
-            <Route path="/" element={<AppLayout />}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="index.html" element={<IndexHtmlRedirect />} />
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="candidates" element={<CandidatesPage />} />
-              <Route path="jobs" element={<JobsPage />} />
-              <Route path="applications" element={<ApplicationsPage />} />
-              <Route path="mailboxes" element={<MailboxesPage />} />
-              <Route path="rules" element={<RulesPage />} />
-              <Route path="activity" element={<ActivityPage />} />
-              <Route path="settings" element={<SettingsPage />} />
-              <Route path="docs" element={<DocsPage />} />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Route>
-          </Routes>
-        </ToastProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  </BrowserRouter>
+              {/* Authenticated workspace */}
+              <Route element={<AppLayout />}>
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/candidates" element={<CandidatesPage />} />
+                <Route path="/jobs" element={<JobsPage />} />
+                <Route path="/applications" element={<ApplicationsPage />} />
+                <Route path="/mailboxes" element={<MailboxesPage />} />
+                <Route path="/rules" element={<RulesPage />} />
+                <Route path="/activity" element={<ActivityPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/docs" element={<DocsPage />} />
+                <Route path="/index.html" element={<IndexHtmlRedirect />} />
+              </Route>
+
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ToastProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </BrowserRouter>
   );
 };
 

@@ -238,8 +238,11 @@ export const RulesPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Recruitment Email Rules</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <p className="eyebrow">Automation</p>
+          <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.03em] text-slate-950 dark:text-slate-50">
+            Recruitment Email Rules
+          </h1>
+          <p className="mt-1.5 text-[12.5px] leading-6 text-slate-500 dark:text-slate-400">
             Deterministic include/exclude filtering, folder routing, and automated job mapping.
           </p>
         </div>
@@ -255,7 +258,7 @@ export const RulesPage: React.FC = () => {
       </div>
 
       {/* Rules Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
           <span className="text-xs font-semibold text-slate-900 dark:text-white">Active Rule Order (Priority ASC)</span>
           <span className="text-[11px] text-slate-500">First matching rule governs applicant ingestion</span>
@@ -368,7 +371,7 @@ export const RulesPage: React.FC = () => {
       </div>
 
       {/* Rule Preview & Test Simulator */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm dark:shadow-xl">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">

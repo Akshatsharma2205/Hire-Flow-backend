@@ -3,7 +3,7 @@ import { Outlet, Navigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useAuth } from '../../context/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { BrandMark } from '../brand/BrandMark';
 
 export const AppLayout: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -12,11 +12,16 @@ export const AppLayout: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F7F8FA] dark:bg-[#0B1220] flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-teal-600 dark:text-teal-400" />
-        <span className="text-xs font-medium tracking-wide text-slate-600 dark:text-slate-400">
-          Initializing HireFlow AI...
-        </span>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#F7F4EE] text-slate-500 dark:bg-[#12100E] dark:text-slate-400">
+        <BrandMark size="lg" className="animate-soft-pulse" />
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="text-[12px] font-semibold tracking-[-0.01em] text-slate-700 dark:text-slate-200">
+            Opening your workspace
+          </span>
+          <span className="text-[10.5px] uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+            Verifying session
+          </span>
+        </div>
       </div>
     );
   }
@@ -26,7 +31,7 @@ export const AppLayout: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] dark:bg-[#0B1220] text-slate-900 dark:text-slate-100 flex">
+    <div className="flex min-h-screen bg-[#F7F4EE] text-slate-900 dark:bg-[#12100E] dark:text-slate-100">
       {/* Sidebar with Desktop Collapse and Mobile Drawer */}
       <Sidebar
         collapsed={sidebarCollapsed}
@@ -38,12 +43,12 @@ export const AppLayout: React.FC = () => {
       {/* Main Content Area */}
       <div
         data-testid="main-content-wrapper"
-        className={`flex-1 flex flex-col min-h-screen transition-all duration-200 ml-0 ${
+        className={`ml-0 flex min-h-screen min-w-0 flex-1 flex-col transition-[margin] duration-300 ease-out-expo ${
           sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'
         }`}
       >
         <Header onOpenMobileNav={() => setMobileNavOpen(true)} />
-        <main className="w-full max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1">
+        <main className="mx-auto w-full max-w-[1536px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
           <Outlet />
         </main>
       </div>
