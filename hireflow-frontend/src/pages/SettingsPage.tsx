@@ -93,10 +93,11 @@ export const SettingsPage: React.FC = () => {
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* Top Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-          Organization & Security Settings
+        <p className="eyebrow">Configuration</p>
+        <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.03em] text-slate-950 dark:text-slate-50">
+          Organization &amp; Security Settings
         </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+        <p className="mt-1.5 text-[12.5px] leading-6 text-slate-500 dark:text-slate-400">
           Tenant identity, appearance preferences, HMAC-SHA256 webhook credentials, and runtime diagnostics.
         </p>
       </div>
@@ -153,11 +154,11 @@ export const SettingsPage: React.FC = () => {
 
             {/* Visual Mini-Preview */}
             <div className="mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-[#F7F8FA] border border-slate-300" />
+              <span className="w-3 h-3 rounded-full bg-[#F7F4EE] border border-slate-300" />
               <span className="w-3 h-3 rounded-full bg-white border border-slate-300" />
-              <span className="w-3 h-3 rounded-full bg-[#0F766E]" />
+              <span className="w-3 h-3 rounded-full bg-[#24513E]" />
               <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-auto font-mono">
-                #F7F8FA / #0F766E
+                #F7F4EE / #24513E
               </span>
             </div>
           </button>
@@ -196,11 +197,11 @@ export const SettingsPage: React.FC = () => {
 
             {/* Visual Mini-Preview */}
             <div className="mt-4 pt-3 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-[#0B1220] border border-slate-700" />
-              <span className="w-3 h-3 rounded-full bg-[#111827] border border-slate-700" />
-              <span className="w-3 h-3 rounded-full bg-[#2DD4BF]" />
+              <span className="w-3 h-3 rounded-full bg-[#12100E] border border-slate-700" />
+              <span className="w-3 h-3 rounded-full bg-[#1A1815] border border-slate-700" />
+              <span className="w-3 h-3 rounded-full bg-[#86BB9F]" />
               <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-auto font-mono">
-                #0B1220 / #2DD4BF
+                #12100E / #86BB9F
               </span>
             </div>
           </button>

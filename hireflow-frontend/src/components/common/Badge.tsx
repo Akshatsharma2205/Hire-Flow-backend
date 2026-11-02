@@ -36,15 +36,15 @@ export const Badge: React.FC<BadgeProps> = ({
   };
 
   const sizeStyles = {
-    sm: 'text-[11px] px-2 py-0.5 gap-1',
-    md: 'text-xs px-2.5 py-1 gap-1.5',
+    sm: 'text-[10.5px] px-1.5 py-0.5 gap-1',
+    md: 'text-[11px] px-2 py-0.5 gap-1.5',
   };
 
   return (
     <span
-      className={`inline-flex items-center font-medium border rounded-full select-none ${sizeStyles[size]} ${variantStyles[variant]} ${className}`}
+      className={`inline-flex select-none items-center rounded-full border font-medium leading-5 ${sizeStyles[size]} ${variantStyles[variant]} ${className}`}
     >
-      {dot && <span className={`w-1.5 h-1.5 rounded-full ${dotColors[variant]}`} />}
+      {dot && <span className={`h-1.5 w-1.5 rounded-full ${dotColors[variant]}`} />}
       {children}
     </span>
   );

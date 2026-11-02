@@ -139,8 +139,11 @@ export const JobsPage: React.FC = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Job Openings & Requisitions</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <p className="eyebrow">Requisitions</p>
+          <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.03em] text-slate-950 dark:text-slate-50">
+            Job Openings &amp; Requisitions
+          </h1>
+          <p className="mt-1.5 text-[12.5px] leading-6 text-slate-500 dark:text-slate-400">
             Manage organization roles, revision histories, and 60/20/20 candidate matching.
           </p>
         </div>

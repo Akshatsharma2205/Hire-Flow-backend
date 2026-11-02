@@ -42,10 +42,10 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 sm:p-6">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 backdrop-blur-md transition-opacity animate-in fade-in duration-150"
+        className="fixed inset-0 animate-in bg-slate-950/45 backdrop-blur-[3px] transition-opacity duration-150 fade-in dark:bg-slate-950/75"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -55,31 +55,31 @@ export const Modal: React.FC<ModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`relative w-full ${maxWidthClasses[maxWidth]} bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col my-8 animate-in fade-in zoom-in-95 duration-150`}
+        className={`relative z-10 my-8 flex w-full ${maxWidthClasses[maxWidth]} animate-in flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl duration-150 fade-in zoom-in-95 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100`}
       >
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex items-start justify-between">
+        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5 dark:border-slate-800">
           <div>
-            <h3 id="modal-title" className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight">
+            <h3 id="modal-title" className="text-[17px] font-semibold tracking-[-0.02em] text-slate-950 dark:text-slate-50">
               {title}
             </h3>
-            {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{subtitle}</p>}
+            {subtitle && <p className="mt-1 text-[12px] leading-5 text-slate-500 dark:text-slate-400">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="-mr-1 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
             aria-label="Close modal"
           >
-            <X className="w-5 h-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="px-6 py-5 overflow-y-auto max-h-[calc(85vh-140px)] text-slate-700 dark:text-slate-200">{children}</div>
+        <div className="max-h-[calc(85vh-140px)] overflow-y-auto px-6 py-5 text-slate-700 dark:text-slate-200">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 py-4 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+          <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50/80 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/50">
             {footer}
           </div>
         )}

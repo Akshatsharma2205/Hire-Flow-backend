@@ -286,7 +286,7 @@ export const DocsPage: React.FC = () => {
       </div>
 
       {/* Main Documentation Viewer Canvas */}
-      <div className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm dark:shadow-xl">
+      <div className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm">
         {/* Document Header */}
         <div className="border-b border-slate-200 dark:border-slate-800 pb-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -297,8 +297,8 @@ export const DocsPage: React.FC = () => {
               <span className="text-slate-400 dark:text-slate-500 text-xs">•</span>
               <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">docs/{activeArticle.id}.md</span>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{activeArticle.title}</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{activeArticle.description}</p>
+            <h1 className="text-2xl font-semibold tracking-[-0.03em] text-slate-950 dark:text-slate-50">{activeArticle.title}</h1>
+            <p className="mt-1.5 text-[12.5px] leading-6 text-slate-500 dark:text-slate-400">{activeArticle.description}</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -317,7 +317,7 @@ export const DocsPage: React.FC = () => {
         </div>
 
         {/* Rendered Markdown Body */}
-        <article className="prose prose-slate dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 text-xs">
+        <article className="prose prose-slate dark:prose-invert max-w-none overflow-x-auto text-slate-700 dark:text-slate-300 text-xs">
           {renderMarkdown(activeArticle.content)}
         </article>
       </div>
